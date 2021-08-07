@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@yatt/*": ["src/*"]
+    },
+    "strict": true,
+    "alwaysStrict": true,
+    "removeComments": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "pretty": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
