@@ -1,31 +1,23 @@
 {
-  "name": "yatt",
-  "version": "0.4.0",
-  "description": "Yet Another TypeScript Template",
+  "name": "github-exporter",
+  "version": "0.1.0",
+  "description": "",
   "main": "dist/index.js",
   "author": "Caian Ertl <hi@caian.org>",
   "license": "CC0-1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/caian-org/yatt.git"
+    "url": "git+https://github.com/caian-org/github-exporter.git"
   },
   "bugs": {
-    "url": "https://github.com/caian-org/yatt/issues"
+    "url": "https://github.com/caian-org/github-exporter/issues"
   },
-  "homepage": "https://github.com/caian-org/yatt#readme",
-  "keywords": [
-    "typescript",
-    "nodejs",
-    "template",
-    "yatt"
-  ],
+  "homepage": "https://github.com/caian-org/github-exporter#readme",
   "scripts": {
-    "all": "npm run build:js && npm run build:docs && npm run fix:style && npm run check:all && npm test && npm run clean",
+    "all": "npm run build:js && npm run fix:style && npm run check:all && npm run clean",
     "start": "node dist/index.js",
-    "start:watch": "nodemon",
     "build:js": "swc src --out-dir dist & tsc --skipLibCheck --noEmit",
     "build:js:clean": "rm -rf dist && npm run build:js",
-    "build:docs": "typedoc --theme ./node_modules/typedoc-neo-theme/bin/default --plugin typedoc-neo-theme src && cp logo.svg docs",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
     "bump:all": "npm run bump:dev && npm run bump:prod",
@@ -35,13 +27,11 @@
     "check:duplicated": "jscpd",
     "check:all": "npm run check:build && npm run check:lint && npm run check:style && npm run check:duplicated",
     "fix:style": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write '**/*.ts' && standardx --fix '**/*.ts'",
-    "test": "jest --verbose --collect-coverage",
-    "test:cov": "npm test && codecov --token=\"$CODECOV_TOKEN\"",
-    "clean": "rm -rf coverage dist docs report",
+    "clean": "rm -rf dist report",
     "prepare": "[ \"$NODE_ENV\" == \"production\" ] && exit 0; husky install"
   },
   "_moduleAliases": {
-    "@yatt": "dist"
+    "@ge": "dist"
   },
   "standardx": {
     "parser": "@typescript-eslint/parser",
@@ -51,7 +41,6 @@
   },
   "eslintIgnore": [
     "dist",
-    "docs",
     "report"
   ],
   "lint-staged": {
@@ -70,90 +59,34 @@
     "ignore": [
       "**/.github/**",
       "**/dist/**",
-      "**/docs/**",
       "**/report/**"
     ]
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "collectCoverageFrom": [
-      "**/src/**/*.{js,jsx,ts,tsx}",
-      "!dist/**/*.js",
-      "!src/index.ts"
-    ],
-    "moduleFileExtensions": [
-      "js",
-      "jsx",
-      "json",
-      "ts",
-      "tsx"
-    ],
-    "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest"
-    },
-    "globals": {
-      "ts-jest": {
-        "tsconfig": "tsconfig.json"
-      }
-    },
-    "testPathIgnorePatterns": [
-      "/dist/",
-      "/node_modules/"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "lines": 80
-      }
-    },
-    "moduleNameMapper": {
-      "^@yatt/(.*)$": "<rootDir>/src/$1"
-    }
-  },
-  "nodemonConfig": {
-    "ignore": [
-      "test",
-      ".git",
-      "node_modules"
-    ],
-    "watch": [
-      "src"
-    ],
-    "exec": "npm run build:js && npm start",
-    "ext": "ts"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.46",
     "@swc/core": "^1.2.74",
-    "@types/jest": "^26.0.24",
     "@types/node": "^16.4.12",
     "@typescript-eslint/eslint-plugin": "^4.29.0",
     "@typescript-eslint/parser": "^4.29.0",
-    "codecov": "^3.8.3",
     "eslint": "^7.32.0",
     "eslint-config-standard-with-typescript": "^20.0.0",
     "eslint-plugin-import": "^2.23.4",
-    "eslint-plugin-jest": "^24.4.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^4.3.1",
     "eslint-plugin-standard": "^5.0.0",
     "husky": "^7.0.1",
-    "jest": "^27.0.6",
     "jscpd": "^3.3.26",
     "lint-staged": "^11.1.1",
-    "nodemon": "^2.0.12",
     "npm-check-updates": "^11.8.3",
     "prettier": "^2.3.2",
     "standardx": "^7.0.0",
-    "ts-jest": "^27.0.4",
     "ts-node": "^10.1.0",
-    "typedoc": "^0.21.5",
-    "typedoc-neo-theme": "^1.1.1",
     "typescript": "^4.3.5",
     "vrelease-bin": "^0.3.1"
   },
   "dependencies": {
     "module-alias": "^2.2.2",
+    "octokit": "^1.3.0",
     "regenerator-runtime": "^0.13.9",
     "winston": "^3.3.3"
   }
