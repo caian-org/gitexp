@@ -1,11 +1,14 @@
 import 'module-alias/register'
+import fs from 'fs'
 import path from 'path'
 import util from 'util'
 
-import _ from 'lodash'
+import chalk from 'chalk'
+import clear from 'clear'
 import Spinner, { Ora as CLISpinner } from 'ora'
 import { SpinnerName } from 'cli-spinners'
 
+import _ from 'lodash'
 import Git from 'nodegit'
 import { Octokit } from 'octokit'
 
@@ -51,6 +54,36 @@ type SpinnerBuilder = (text: string) => CLISpinner
 const fmt = util.format
 const clone = Git.Clone.clone
 
+const getFiglets = async (): Promise<string[]> => {
+  const fig: string[] = []
+
+  try {
+    let foundStart = false
+    const itself = await fs.promises.readFile(__filename)
+    const lines = itself.toString().split('\n')
+
+    for (const line of lines) {
+      const l = line.trim()
+      if (l === '(%%%START') {
+        foundStart = true
+        continue
+      }
+
+      if (l === '(%%%END') {
+        break
+      }
+
+      if (foundStart) {
+        fig.push(line)
+      }
+    }
+
+    return fig.join('\n').split('(%%%DIV')
+  } catch (e) {
+    return []
+  }
+}
+
 const spinner =
   (sn: SpinnerName): SpinnerBuilder =>
     (text: string): CLISpinner => {
@@ -63,7 +96,7 @@ const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCl
   const s = await clone(r.url, path.join(__dirname, r.name))
 
   g.repoCounter += 1
-  const c = fmt('cloned %s', _.padEnd(`"${r.fullName}"`, g.repoNamePad))
+  const c = fmt('cloned %s', _.padEnd(r.fullName, g.repoNamePad))
   const p = fmt('%s/%s completed', _.padStart(g.repoCounter.toString(), g.counterPad), g.repoTotal)
 
   if (!r.isPrivate) {
@@ -139,7 +172,17 @@ const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
   return octo
 }
 
+const displayBanner = async (): Promise<void> => {
+  clear()
+
+  const figlets = await getFiglets()
+  const banner = figlets.length > 0 ? _.sample(figlets) : ''
+
+  console.log('\n' + chalk.gray(banner) + '\n')
+}
+
 const main = async (): Promise<void> => {
+  await displayBanner()
   const sp = spinner('point')
 
   const octo = await authenticate(sp)
@@ -173,3 +216,68 @@ const main = async (): Promise<void> => {
 }
 
 main().catch((err) => console.error(err))
+/*
+(%%%START
+       _ _
+  __ _(_) |_ _____  ___ __
+ / _` | | __/ _ \ \/ / '_ \
+| (_| | | ||  __/>  <| |_) |
+ \__, |_|\__\___/_/\_\ .__/
+ |___/               |_|
+(%%%DIV
+        __________
+_______ ___(_)_  /_________  _________
+__  __ `/_  /_  __/  _ \_  |/_/__  __ \
+_  /_/ /_  / / /_ /  __/_>  < __  /_/ /
+_\__, / /_/  \__/ \___//_/|_| _  .___/
+/____/                        /_/
+(%%%DIV
+  @@@@@@@  @@@ @@@@@@@ @@@@@@@@ @@@  @@@ @@@@@@@
+ !@@       @@!   @@!   @@!      @@!  !@@ @@!  @@@
+ !@! @!@!@ !!@   @!!   @!!!:!    !@@!@!  @!@@!@!
+ :!!   !!: !!:   !!:   !!:       !: :!!  !!:
+  :: :: :  :      :    : :: ::: :::  :::  :
+(%%%DIV
+         oo   dP
+              88
+.d8888b. dP d8888P .d8888b. dP.  .dP 88d888b.
+88'  `88 88   88   88ooood8  `8bd8'  88'  `88
+88.  .88 88   88   88.  ...  .d88b.  88.  .88
+`8888P88 dP   dP   `88888P' dP'  `dP 88Y888P'
+     .88                             88
+ d8888P                              dP
+(%%%DIV
+              _/    _/
+     _/_/_/      _/_/_/_/    _/_/    _/    _/  _/_/_/
+  _/    _/  _/    _/      _/_/_/_/    _/_/    _/    _/
+ _/    _/  _/    _/      _/        _/    _/  _/    _/
+  _/_/_/  _/      _/_/    _/_/_/  _/    _/  _/_/_/
+     _/                                    _/
+_/_/                                      _/
+(%%%DIV
+          __
+       __/\ \__
+   __ /\_\ \ ,_\    __   __  _  _____
+ /'_ `\/\ \ \ \/  /'__`\/\ \/'\/\ '__`\
+/\ \L\ \ \ \ \ \_/\  __/\/>  </\ \ \L\ \
+\ \____ \ \_\ \__\ \____\/\_/\_\\ \ ,__/
+ \/___L\ \/_/\/__/\/____/\//\/_/ \ \ \/
+   /\____/                        \ \_\
+   \_/__/                          \/_/
+(%%%DIV
+              ||
+        ''    ||
+.|''|,  ||  ''||''  .|''|, \\  // '||''|,
+||  ||  ||    ||    ||..||   ><    ||  ||
+`|..|| .||.   `|..' `|...  //  \\  ||..|'
+    ||                             ||
+ `..|'                            .||
+(%%%DIV
+        .__  __
+   ____ |__|/  |_  ____ ___  _________
+  / ___\|  \   __\/ __ \\  \/  /\____ \
+ / /_/  >  ||  | \  ___/ >    < |  |_> >
+ \___  /|__||__|  \___  >__/\_ \|   __/
+/_____/               \/      \/|__|
+(%%%END
+ */
