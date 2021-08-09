@@ -103,7 +103,10 @@
     "vrelease-bin": "^0.3.1"
   },
   "dependencies": {
+    "chalk": "^4.1.2",
+    "clear": "^0.1.0",
     "cli-spinners": "^2.6.0",
+    "commander": "^8.1.0",
     "lodash": "^4.17.21",
     "module-alias": "^2.2.2",
     "nodegit": "^0.27.0",
