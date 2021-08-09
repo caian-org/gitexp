@@ -1,9 +1,12 @@
 import 'module-alias/register'
+import path from 'path'
 import util from 'util'
 
 import _ from 'lodash'
 import Spinner, { Ora as CLISpinner } from 'ora'
 import { SpinnerName } from 'cli-spinners'
+
+import Git from 'nodegit'
 import { Octokit } from 'octokit'
 
 interface IRepository {
@@ -30,7 +33,23 @@ interface IUserData {
   stats: IReposStat
 }
 
+interface IGitCloneSpinner {
+  repoCounter: number
+  counterPad: number
+  repoNamePad: number
+  repoTotal: string
+  spinner: CLISpinner
+}
+
+interface IGitCloneStatus {
+  repository: IRepository
+  status: Git.Repository
+}
+
 type SpinnerBuilder = (text: string) => CLISpinner
+
+const fmt = util.format
+const clone = Git.Clone.clone
 
 const spinner =
   (sn: SpinnerName): SpinnerBuilder =>
@@ -39,6 +58,20 @@ const spinner =
       s.start()
       return s
     }
+
+const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
+  const s = await clone(r.url, path.join(__dirname, r.name))
+
+  g.repoCounter += 1
+  const c = fmt('cloned %s', _.padEnd(`"${r.fullName}"`, g.repoNamePad))
+  const p = fmt('%s/%s completed', _.padStart(g.repoCounter.toString(), g.counterPad), g.repoTotal)
+
+  if (!r.isPrivate) {
+    g.spinner.text = `${c} | ${p}`
+  }
+
+  return { repository: r, status: s }
+}
 
 const categorizeRepositories = (repos: IRepository[]): IReposStat => {
   const s: IReposStat = { pub: [], priv: [], users: [], orgs: [] }
@@ -87,7 +120,7 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
   const m = '(%d public; %d private; %d orgs; %d users)'
   lb.text =
     `got ${r.length} repositories ` +
-    (r.length > 0 ? util.format(m, s.pub.length, s.priv.length, s.orgs.length, s.users.length) : '')
+    (r.length > 0 ? fmt(m, s.pub.length, s.priv.length, s.orgs.length, s.users.length) : '')
 
   lb.succeed()
   return { repositories: r, stats: s }
@@ -96,7 +129,7 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
 const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
   const lb = sp('authenticating')
 
-  const auth = ''
+  const { GITHUB_AUTH_TOKEN: auth } = process.env
   const octo = new Octokit({ auth })
 
   const { data: authUser } = await octo.rest.users.getAuthenticated()
@@ -110,7 +143,33 @@ const main = async (): Promise<void> => {
   const sp = spinner('point')
 
   const octo = await authenticate(sp)
-  await fetchAllRepositories(sp, octo)
+  const { repositories: rps } = await fetchAllRepositories(sp, octo)
+
+  const gcs: IGitCloneSpinner = {
+    repoCounter: 0,
+    repoTotal: rps.length.toString(),
+    counterPad: rps.length.toString().length,
+    repoNamePad: rps.map((r) => r.fullName).reduce((a, b) => (a.length > b.length ? a : b)).length,
+    spinner: sp('cloning repositories')
+  }
+
+  const repoCloneStatus: Array<PromiseSettledResult<IGitCloneStatus>> = []
+  for (const chunk of _.chunk(rps, 5)) {
+    // eslint-disable-next-line
+    const calls = chunk.map((repo) => cloneLocally(gcs, repo))
+
+    const res = await Promise.allSettled(calls)
+    res.forEach((i) => repoCloneStatus.push(i))
+  }
+
+  const successfullyCloned = repoCloneStatus.filter((r) => r.status === 'fulfilled')
+  const erroredCloned = _.xor(repoCloneStatus, successfullyCloned)
+
+  const clonedCount = successfullyCloned.length.toString()
+  gcs.spinner.text = fmt('cloned %s/%s', _.padStart(clonedCount, gcs.counterPad), gcs.repoTotal)
+  gcs.spinner.succeed()
+
+  console.log(`failed: ${erroredCloned.length}`)
 }
 
 main().catch((err) => console.error(err))
