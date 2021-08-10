@@ -5,6 +5,7 @@ import util from 'util'
 
 import chalk from 'chalk'
 import clear from 'clear'
+import fastFolderSize from 'fast-folder-size'
 import Spinner, { Ora as CLISpinner } from 'ora'
 import { SpinnerName } from 'cli-spinners'
 
@@ -12,6 +13,7 @@ import _ from 'lodash'
 import Git from 'nodegit'
 import { Octokit } from 'octokit'
 
+/* ... */
 interface IRepository {
   name: string
   fullName: string
@@ -24,6 +26,7 @@ interface IRepository {
   }
 }
 
+/* ... */
 interface IReposStat {
   pub: string[]
   priv: string[]
@@ -31,11 +34,13 @@ interface IReposStat {
   orgs: string[]
 }
 
+/* ... */
 interface IUserData {
   repositories: IRepository[]
   stats: IReposStat
 }
 
+/* ... */
 interface IGitCloneSpinner {
   repoCounter: number
   counterPad: number
@@ -44,23 +49,47 @@ interface IGitCloneSpinner {
   spinner: CLISpinner
 }
 
+/* ... */
 interface IGitCloneStatus {
   repository: IRepository
   status: Git.Repository
 }
 
+/* ... */
 type SpinnerBuilder = (text: string) => CLISpinner
+type CloneStatus = PromiseSettledResult<IGitCloneStatus>
+
+/* ... */
+const DEST_DIR = path.join(__dirname, 'gitexp-out')
 
 const fmt = util.format
 const clone = Git.Clone.clone
+const ffs = util.promisify(fastFolderSize)
 
+const str = (n: Buffer | number): string => n.toString()
+
+/* ... */
+const formatBytes = (bytes: number, decimals: number = 2): string => {
+  if (bytes === 0) {
+    return '0 Bytes'
+  }
+
+  const k = 1024
+  const dm = Number(decimals < 0 ? 0 : decimals)
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return fmt('%s %s', str(parseFloat((bytes / Math.pow(k, i)).toFixed(dm))), sizes[i])
+}
+
+/* ... */
 const getFiglets = async (): Promise<string[]> => {
   const fig: string[] = []
 
   try {
     let foundStart = false
     const itself = await fs.promises.readFile(__filename)
-    const lines = itself.toString().split('\n')
+    const lines = str(itself).split('\n')
 
     for (const line of lines) {
       const l = line.trim()
@@ -74,7 +103,7 @@ const getFiglets = async (): Promise<string[]> => {
       }
 
       if (foundStart) {
-        fig.push(line)
+        fig.push(' '.repeat(2).concat(line))
       }
     }
 
@@ -84,6 +113,18 @@ const getFiglets = async (): Promise<string[]> => {
   }
 }
 
+/* ... */
+const censor = (o: string, n: string): string => {
+  const c = '*'
+  const r = (t: string): string =>
+    t.length < 4
+      ? c.repeat(t.length)
+      : t.slice(0, 3 - t.length).concat(c.repeat((3 - t.length) * -1))
+
+  return fmt('%s/%s', r(o), r(n))
+}
+
+/* ... */
 const spinner =
   (sn: SpinnerName): SpinnerBuilder =>
     (text: string): CLISpinner => {
@@ -92,20 +133,45 @@ const spinner =
       return s
     }
 
-const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
-  const s = await clone(r.url, path.join(__dirname, r.name))
-
+/* ... */
+const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository): void => {
   g.repoCounter += 1
-  const c = fmt('cloned %s', _.padEnd(r.fullName, g.repoNamePad))
-  const p = fmt('%s/%s completed', _.padStart(g.repoCounter.toString(), g.counterPad), g.repoTotal)
 
-  if (!r.isPrivate) {
-    g.spinner.text = `${c} | ${p}`
+  const n = r.isPrivate ? censor(r.owner.name, r.name) : r.fullName
+  const c = fmt('cloned %s', _.padEnd(n, g.repoNamePad))
+  const p = fmt('%s/%s completed', _.padStart(str(g.repoCounter), g.counterPad), g.repoTotal)
+
+  g.spinner.text = fmt('%s | %s', c, p)
+}
+
+const concludeCloneSpinner = async (
+  g: IGitCloneSpinner,
+  s: CloneStatus[],
+  e: CloneStatus[]
+): Promise<void> => {
+  const destDirSize = await ffs(DEST_DIR)
+
+  const labelBytesDownloaded = fmt('%s downloaded locally', formatBytes(destDirSize ?? 0))
+  const labelCloned = fmt('cloned %s/%s', _.padStart(str(s.length), g.counterPad), g.repoTotal)
+
+  if (e.length === 0) {
+    g.spinner.succeed(fmt('%s (%s)', labelCloned, labelBytesDownloaded))
+  } else {
+    const labelClonedWithErrors = fmt('%s failed', e.length)
+    g.spinner.fail(fmt('%s (%s; %s)', labelCloned, labelClonedWithErrors, labelBytesDownloaded))
   }
+}
+
+/* ... */
+const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
+  const d = path.join(DEST_DIR, r.owner.name)
+  const s = await clone(r.url, path.join(d, r.name))
+  updateCloneSpinner(g, r)
 
   return { repository: r, status: s }
 }
 
+/* ... */
 const categorizeRepositories = (repos: IRepository[]): IReposStat => {
   const s: IReposStat = { pub: [], priv: [], users: [], orgs: [] }
 
@@ -117,6 +183,7 @@ const categorizeRepositories = (repos: IRepository[]): IReposStat => {
   return _.mapValues(s, _.uniq)
 }
 
+/* ... */
 const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<IUserData> => {
   const lb = sp('fetching repositories')
 
@@ -152,26 +219,30 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
   const s = categorizeRepositories(r)
   const m = '(%d public; %d private; %d orgs; %d users)'
   lb.text =
-    `got ${r.length} repositories ` +
+    fmt('got %s repositories ', str(r.length)) +
     (r.length > 0 ? fmt(m, s.pub.length, s.priv.length, s.orgs.length, s.users.length) : '')
 
   lb.succeed()
   return { repositories: r, stats: s }
 }
 
+/* ... */
 const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
   const lb = sp('authenticating')
 
-  const { GITHUB_AUTH_TOKEN: auth } = process.env
-  const octo = new Octokit({ auth })
+  try {
+    const octo = new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN })
+    const { data: authUser } = await octo.rest.users.getAuthenticated()
 
-  const { data: authUser } = await octo.rest.users.getAuthenticated()
-  lb.text = `authenticated as @${authUser.login} (${authUser.name ?? ''})`
-
-  lb.succeed()
-  return octo
+    lb.succeed(fmt('authenticated as @%s (%s)', authUser.login, authUser.name ?? ''))
+    return octo
+  } catch (e) {
+    lb.fail(e.toString().concat(' -- is your token valid? did you export it?'))
+    throw e
+  }
 }
 
+/* ... */
 const displayBanner = async (): Promise<void> => {
   clear()
 
@@ -181,6 +252,7 @@ const displayBanner = async (): Promise<void> => {
   console.log('\n' + chalk.gray(banner) + '\n')
 }
 
+/* ... */
 const main = async (): Promise<void> => {
   await displayBanner()
   const sp = spinner('point')
@@ -190,13 +262,13 @@ const main = async (): Promise<void> => {
 
   const gcs: IGitCloneSpinner = {
     repoCounter: 0,
-    repoTotal: rps.length.toString(),
-    counterPad: rps.length.toString().length,
+    repoTotal: str(rps.length),
+    counterPad: str(rps.length).length,
     repoNamePad: rps.map((r) => r.fullName).reduce((a, b) => (a.length > b.length ? a : b)).length,
     spinner: sp('cloning repositories')
   }
 
-  const repoCloneStatus: Array<PromiseSettledResult<IGitCloneStatus>> = []
+  const repoCloneStatus: CloneStatus[] = []
   for (const chunk of _.chunk(rps, 5)) {
     // eslint-disable-next-line
     const calls = chunk.map((repo) => cloneLocally(gcs, repo))
@@ -205,17 +277,14 @@ const main = async (): Promise<void> => {
     res.forEach((i) => repoCloneStatus.push(i))
   }
 
-  const successfullyCloned = repoCloneStatus.filter((r) => r.status === 'fulfilled')
-  const erroredCloned = _.xor(repoCloneStatus, successfullyCloned)
+  const clonedSuccessfully = repoCloneStatus.filter((r) => r.status === 'fulfilled')
+  const clonedWithErrors = _.xor(repoCloneStatus, clonedSuccessfully)
 
-  const clonedCount = successfullyCloned.length.toString()
-  gcs.spinner.text = fmt('cloned %s/%s', _.padStart(clonedCount, gcs.counterPad), gcs.repoTotal)
-  gcs.spinner.succeed()
-
-  console.log(`failed: ${erroredCloned.length}`)
+  await concludeCloneSpinner(gcs, clonedSuccessfully, clonedWithErrors)
 }
 
-main().catch((err) => console.error(err))
+main().catch(() => process.exit(1))
+
 /*
 (%%%START
        _ _
@@ -232,11 +301,11 @@ _  /_/ /_  / / /_ /  __/_>  < __  /_/ /
 _\__, / /_/  \__/ \___//_/|_| _  .___/
 /____/                        /_/
 (%%%DIV
-  @@@@@@@  @@@ @@@@@@@ @@@@@@@@ @@@  @@@ @@@@@@@
- !@@       @@!   @@!   @@!      @@!  !@@ @@!  @@@
- !@! @!@!@ !!@   @!!   @!!!:!    !@@!@!  @!@@!@!
- :!!   !!: !!:   !!:   !!:       !: :!!  !!:
-  :: :: :  :      :    : :: ::: :::  :::  :
+ @@@@@@@  @@@ @@@@@@@ @@@@@@@@ @@@  @@@ @@@@@@@
+!@@       @@!   @@!   @@!      @@!  !@@ @@!  @@@
+!@! @!@!@ !!@   @!!   @!!!:!    !@@!@!  @!@@!@!
+:!!   !!: !!:   !!:   !!:       !: :!!  !!:
+ :: :: :  :      :    : :: ::: :::  :::  :
 (%%%DIV
          oo   dP
               88
