@@ -9,7 +9,7 @@
       "legacyDecorator": true,
       "decoratorMetadata": true
     },
-    "target": "es2015",
+    "target": "es2018",
     "keepClassNames": true,
     "loose": true
   },
