@@ -24,13 +24,13 @@ jobs:
       - name: Checkout to yatt
         uses: actions/checkout@v2
 
-      - name: Set up NodeJS 15
+      - name: Set up NodeJS 14
         uses: actions/setup-node@v1
         with:
-          node-version: 15.x
+          node-version: 14.x
 
       - name: Install dependencies
         run: npm i
 
-      - name: Perform all checkings
-        run: npm run all
+      - name: Perform code checkings
+        run: npm run check:lint && npm run check:style && npm run check:duplicated
