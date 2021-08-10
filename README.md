@@ -1,46 +1,17 @@
-[![Tests][gh-tc-shield]][gh-tc-url]
 [![Code check][gh-cc-shield]][gh-cc-url]
-[![Code coverage][codecov-shield]][codecov-url]
 [![Code quality][lgtm-shield]][lgtm-url]
 [![GitHub tag][tag-shield]][tag-url]
 
-# Yet Another TypeScript Template
+# `gitexp`
 
-<img src="logo.svg" height="240px" align="right"/>
+[gh-cc-shield]: https://img.shields.io/github/workflow/status/caian-org/gitexp/code-check?label=code%20check&logo=github&style=flat-square
+[gh-cc-url]: https://github.com/caian-org/gitexp/actions/workflows/code-check.yml
 
-An opinionated template for TypeScript projects that includes, out of the box:
+[lgtm-shield]: https://img.shields.io/lgtm/grade/javascript/g/caian-org/github-exporter.svg?logo=lgtm&style=flat-square
+[lgtm-url]: https://lgtm.com/projects/g/caian-org/github-exporter/context:javascript
 
-- Type-safe JS with __TypeScript__
-- Unit testing with __Jest__
-- Code coverage on __Codecov__
-- __Docker__ image
-- Good-looking API documentation with __TypeDoc__
-- CI/CD pipeline on __GitHub Actions__ with:
-    - Linting, style and code duplication checking
-    - Test execution and coverage report upload
-    - Documentation assets upload to public S3 bucket
-    - Docker image build and push to DockerHub
-
-[gh-tc-shield]: https://img.shields.io/github/workflow/status/caian-org/yatt/test-with-cov?label=tests&logo=github&style=flat-square
-[gh-tc-url]: https://github.com/caian-org/yatt/actions/workflows/test-with-cov.yml
-
-[gh-cc-shield]: https://img.shields.io/github/workflow/status/caian-org/yatt/code-check?label=code%20check&logo=github&style=flat-square
-[gh-cc-url]: https://github.com/caian-org/yatt/actions/workflows/code-check.yml
-
-[codecov-shield]: https://img.shields.io/codecov/c/github/caian-org/yatt.svg?logo=codecov&logoColor=FFF&style=flat-square
-[codecov-url]: https://codecov.io/gh/caian-org/yatt
-
-[lgtm-shield]: https://img.shields.io/lgtm/grade/javascript/g/caian-org/yatt.svg?logo=lgtm&style=flat-square
-[lgtm-url]: https://lgtm.com/projects/g/caian-org/yatt/context:javascript
-
-[tag-shield]: https://img.shields.io/github/tag/caian-org/yatt.svg?logo=git&logoColor=FFF&style=flat-square
-[tag-url]: https://github.com/caian-org/yatt/releases
-
-
-## How can I use it?
-
-Simply put: take what suits you, ignore or change what you do not like, and
-apply according to his will.
+[tag-shield]: https://img.shields.io/github/tag/caian-org/gitexp.svg?logo=git&logoColor=FFF&style=flat-square
+[tag-url]: https://github.com/caian-org/gitexp/releases
 
 
 ## License
