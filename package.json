@@ -1,5 +1,5 @@
 {
-  "name": "github-exporter",
+  "name": "gitexp",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -7,22 +7,23 @@
   "license": "CC0-1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/caian-org/github-exporter.git"
+    "url": "git+https://github.com/caian-org/gitexp.git"
   },
   "bugs": {
-    "url": "https://github.com/caian-org/github-exporter/issues"
+    "url": "https://github.com/caian-org/gitexp/issues"
   },
   "engines": {
     "node": "<15",
     "npm": "<7"
   },
   "engineStrict": true,
-  "homepage": "https://github.com/caian-org/github-exporter#readme",
+  "homepage": "https://github.com/caian-org/gitexp#readme",
   "scripts": {
     "all": "npm run build:js && npm run fix:style && npm run check:all && npm run clean",
     "start": "node dist/index.js",
     "start:ts": "ts-node src/index.ts",
     "build:js": "swc src --out-dir dist & tsc --skipLibCheck --noEmit",
+    "build:js:release": "swc src --out-dir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
     "build:js:clean": "rm -rf dist && npm run build:js",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
@@ -32,7 +33,8 @@
     "check:style": "standardx",
     "check:duplicated": "jscpd",
     "check:all": "npm run check:build && npm run check:lint && npm run check:style && npm run check:duplicated",
-    "fix:style": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write '**/*.ts' && standardx --fix '**/*.ts'",
+    "fix:style": "npm run prettify '**/*.ts' && standardx --fix '**/*.ts'",
+    "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
     "clean": "rm -rf dist report",
     "commit": "cz",
     "prepare": "[ \"$NODE_ENV\" == \"production\" ] && exit 0; husky install"
@@ -79,6 +81,7 @@
     "@commitlint/config-conventional": "^13.1.0",
     "@swc/cli": "^0.1.46",
     "@swc/core": "^1.2.75",
+    "@types/archiver": "^5.1.1",
     "@types/clear": "^0.1.2",
     "@types/lodash": "^4.14.172",
     "@types/node": "^16.4.13",
@@ -104,10 +107,12 @@
     "vrelease-bin": "^0.3.1"
   },
   "dependencies": {
+    "archiver": "^5.3.0",
     "chalk": "^4.1.2",
     "clear": "^0.1.0",
     "cli-spinners": "^2.6.0",
     "commander": "^8.1.0",
+    "fast-folder-size": "^1.4.0",
     "lodash": "^4.17.21",
     "module-alias": "^2.2.2",
     "nodegit": "^0.27.0",
