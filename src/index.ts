@@ -5,6 +5,7 @@ import util from 'util'
 
 import chalk from 'chalk'
 import clear from 'clear'
+import pluralize from 'pluralize'
 import fastFolderSize from 'fast-folder-size'
 import Spinner, { Ora as CLISpinner } from 'ora'
 import { SpinnerName } from 'cli-spinners'
@@ -42,7 +43,8 @@ interface IUserData {
 
 /* ... */
 interface IGitCloneSpinner {
-  repoCounter: number
+  repoClonedCounter: number
+  repoFailedCounter: number
   counterPad: number
   repoNamePad: number
   repoTotal: string
@@ -130,18 +132,24 @@ const spinner =
     (text: string): CLISpinner => {
       const s = Spinner({ text, spinner: sn, discardStdin: true })
       s.start()
+
       return s
     }
 
 /* ... */
-const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository): void => {
-  g.repoCounter += 1
+const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: boolean): void => {
+  if (hasFailed) {
+    g.repoFailedCounter += 1
+  } else {
+    g.repoClonedCounter += 1
+  }
 
   const n = r.isPrivate ? censor(r.owner.name, r.name) : r.fullName
   const c = fmt('cloned %s', _.padEnd(n, g.repoNamePad))
-  const p = fmt('%s/%s completed', _.padStart(str(g.repoCounter), g.counterPad), g.repoTotal)
+  const p = fmt('%s/%s completed', _.padStart(str(g.repoClonedCounter), g.counterPad), g.repoTotal)
+  const f = g.repoFailedCounter > 0 ? fmt(', %s failed', g.repoFailedCounter.toString()) : ''
 
-  g.spinner.text = fmt('%s | %s', c, p)
+  g.spinner.text = fmt('%s | %s', c, p.concat(f))
 }
 
 const concludeCloneSpinner = async (
@@ -165,10 +173,16 @@ const concludeCloneSpinner = async (
 /* ... */
 const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
   const d = path.join(DEST_DIR, r.owner.name)
-  const s = await clone(r.url, path.join(d, r.name))
-  updateCloneSpinner(g, r)
 
-  return { repository: r, status: s }
+  try {
+    const s = await clone(r.url, path.join(d, r.name))
+    updateCloneSpinner(g, r, false)
+
+    return { repository: r, status: s }
+  } catch (e) {
+    updateCloneSpinner(g, r, true)
+    throw e
+  }
 }
 
 /* ... */
@@ -217,12 +231,22 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
   }
 
   const s = categorizeRepositories(r)
-  const m = '(%d public; %d private; %d orgs; %d users)'
-  lb.text =
-    fmt('got %s repositories ', str(r.length)) +
-    (r.length > 0 ? fmt(m, s.pub.length, s.priv.length, s.orgs.length, s.users.length) : '')
+  const m = fmt(
+    '(%s; %s; %s; %s)',
+    pluralize('public', s.pub.length, true),
+    pluralize('private', s.priv.length, true),
+    pluralize('organization', s.orgs.length, true),
+    pluralize('user', s.users.length, true)
+  )
+
+  lb.text = fmt(
+    'found %s %s',
+    pluralize('repository', r.length, true),
+    (r.length, r.length > 0 ? m : '')
+  )
 
   lb.succeed()
+
   return { repositories: r, stats: s }
 }
 
@@ -234,10 +258,15 @@ const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
     const octo = new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN })
     const { data: authUser } = await octo.rest.users.getAuthenticated()
 
-    lb.succeed(fmt('authenticated as @%s (%s)', authUser.login, authUser.name ?? ''))
+    const login = chalk.cyan(fmt('@%s', authUser.login))
+    const name = authUser.name !== undefined ? fmt('(%s)', chalk.italic(authUser.name)) : ''
+    lb.succeed(fmt('authenticated as %s %s', login, name))
+
     return octo
   } catch (e) {
-    lb.fail(e.toString().concat(' -- is your token valid? did you export it?'))
+    const errorMessage = chalk.bold.red(e.toString())
+    lb.fail(errorMessage.concat(' -- is your token valid? did you export it?'))
+
     throw e
   }
 }
@@ -261,7 +290,8 @@ const main = async (): Promise<void> => {
   const { repositories: rps } = await fetchAllRepositories(sp, octo)
 
   const gcs: IGitCloneSpinner = {
-    repoCounter: 0,
+    repoClonedCounter: 0,
+    repoFailedCounter: 0,
     repoTotal: str(rps.length),
     counterPad: str(rps.length).length,
     repoNamePad: rps.map((r) => r.fullName).reduce((a, b) => (a.length > b.length ? a : b)).length,
