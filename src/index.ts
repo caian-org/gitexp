@@ -88,6 +88,13 @@ const formatBytes = (bytes: number, decimals: number = 2): string => {
 const getFiglets = async (): Promise<string[]> => {
   const fig: string[] = []
 
+  const t = (n: string): string => '(%%%' + n.toUpperCase()
+  const tag = {
+    start: t('start'),
+    end: t('end'),
+    div: t('div')
+  }
+
   try {
     let foundStart = false
     const itself = await fs.promises.readFile(__filename)
@@ -95,21 +102,30 @@ const getFiglets = async (): Promise<string[]> => {
 
     for (const line of lines) {
       const l = line.trim()
-      if (l === '(%%%START') {
+      if (l === '') {
+        continue
+      }
+
+      if (l.startsWith(tag.start)) {
         foundStart = true
         continue
       }
 
-      if (l === '(%%%END') {
+      if (l.startsWith(tag.end)) {
         break
       }
 
       if (foundStart) {
+        if (l.startsWith(tag.div)) {
+          fig.push(tag.div)
+          continue
+        }
+
         fig.push(' '.repeat(2).concat(line))
       }
     }
 
-    return fig.join('\n').split('(%%%DIV')
+    return fig.join('\n').split(tag.div)
   } catch (e) {
     return []
   }
@@ -278,7 +294,7 @@ const displayBanner = async (): Promise<void> => {
   const figlets = await getFiglets()
   const banner = figlets.length > 0 ? _.sample(figlets) : ''
 
-  console.log('\n' + chalk.gray(banner) + '\n')
+  console.log(fmt('\n%s\n', chalk.gray(banner)))
 }
 
 /* ... */
@@ -316,27 +332,37 @@ const main = async (): Promise<void> => {
 main().catch(() => process.exit(1))
 
 /*
-(%%%START
-       _ _
-  __ _(_) |_ _____  ___ __
- / _` | | __/ _ \ \/ / '_ \
-| (_| | | ||  __/>  <| |_) |
- \__, |_|\__\___/_/\_\ .__/
- |___/               |_|
-(%%%DIV
+(%%%START | font rev
+
+======================================
+=============  =======================
+==   ===  ==    ===   ===  =  ==    ==
+=  =  =======  ===  =  ==  =  ==  =  =
+==    ==  ===  ===     ===   ===  =  =
+====  ==  ===  ===  ======   ===    ==
+=  =  ==  ===  ===  =  ==  =  ==  ====
+==   ===  ===   ===   ===  =  ==  ====
+======================================
+
+(%%%DIV | font speed
+
         __________
 _______ ___(_)_  /_________  _________
 __  __ `/_  /_  __/  _ \_  |/_/__  __ \
 _  /_/ /_  / / /_ /  __/_>  < __  /_/ /
 _\__, / /_/  \__/ \___//_/|_| _  .___/
 /____/                        /_/
-(%%%DIV
+
+(%%%DIV | font sblood
+
  @@@@@@@  @@@ @@@@@@@ @@@@@@@@ @@@  @@@ @@@@@@@
 !@@       @@!   @@!   @@!      @@!  !@@ @@!  @@@
 !@! @!@!@ !!@   @!!   @!!!:!    !@@!@!  @!@@!@!
 :!!   !!: !!:   !!:   !!:       !: :!!  !!:
  :: :: :  :      :    : :: ::: :::  :::  :
-(%%%DIV
+
+(%%%DIV | font nancyj-fancy
+
          oo   dP
               88
 .d8888b. dP d8888P .d8888b. dP.  .dP 88d888b.
@@ -345,7 +371,9 @@ _\__, / /_/  \__/ \___//_/|_| _  .___/
 `8888P88 dP   dP   `88888P' dP'  `dP 88Y888P'
      .88                             88
  d8888P                              dP
-(%%%DIV
+
+(%%%DIV | font lean
+
               _/    _/
      _/_/_/      _/_/_/_/    _/_/    _/    _/  _/_/_/
   _/    _/  _/    _/      _/_/_/_/    _/_/    _/    _/
@@ -353,7 +381,9 @@ _\__, / /_/  \__/ \___//_/|_| _  .___/
   _/_/_/  _/      _/_/    _/_/_/  _/    _/  _/_/_/
      _/                                    _/
 _/_/                                      _/
-(%%%DIV
+
+(%%%DIV | font larry3d
+
           __
        __/\ \__
    __ /\_\ \ ,_\    __   __  _  _____
@@ -363,7 +393,9 @@ _/_/                                      _/
  \/___L\ \/_/\/__/\/____/\//\/_/ \ \ \/
    /\____/                        \ \_\
    \_/__/                          \/_/
-(%%%DIV
+
+(%%%DIV | font fender
+
               ||
         ''    ||
 .|''|,  ||  ''||''  .|''|, \\  // '||''|,
@@ -371,12 +403,15 @@ _/_/                                      _/
 `|..|| .||.   `|..' `|...  //  \\  ||..|'
     ||                             ||
  `..|'                            .||
-(%%%DIV
+
+(%%%DIV | font graffiti
+
         .__  __
    ____ |__|/  |_  ____ ___  _________
   / ___\|  \   __\/ __ \\  \/  /\____ \
  / /_/  >  ||  | \  ___/ >    < |  |_> >
  \___  /|__||__|  \___  >__/\_ \|   __/
 /_____/               \/      \/|__|
+
 (%%%END
  */
