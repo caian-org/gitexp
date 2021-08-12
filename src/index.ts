@@ -1,19 +1,23 @@
-import 'module-alias/register'
+/* standard lib */
 import fs from 'fs'
 import path from 'path'
 import util from 'util'
 
-import chalk from 'chalk'
-import clear from 'clear'
-import pluralize from 'pluralize'
-import fastFolderSize from 'fast-folder-size'
-import Spinner, { Ora as CLISpinner } from 'ora'
-import { SpinnerName } from 'cli-spinners'
-
+/* core features */
+import 'module-alias/register'
 import _ from 'lodash'
 import Git from 'nodegit'
 import archiver from 'archiver'
+import fastFolderSize from 'fast-folder-size'
 import { Octokit } from 'octokit'
+import { differenceInSeconds, secondsToMinutes, secondsToHours } from 'date-fns'
+
+/* aesthetic stuff */
+import chalk from 'chalk'
+import clear from 'clear'
+import plural from 'pluralize'
+import Spinnies from 'spinnies'
+import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
 
 /* ... */
 interface IRepository {
@@ -26,6 +30,13 @@ interface IRepository {
     name: string
     isOrg: boolean
   }
+}
+
+/* ... */
+interface ISpinny {
+  ref: Spinny
+  succeed: (t: string) => void
+  fail: (t: string) => void
 }
 
 /* ... */
@@ -49,7 +60,7 @@ interface IGitCloneSpinner {
   counterPad: number
   repoNamePad: number
   repoTotal: string
-  spinner: CLISpinner
+  spinner: ISpinny
 }
 
 /* ... */
@@ -59,8 +70,15 @@ interface IGitCloneStatus {
 }
 
 /* ... */
-type SpinnerBuilder = (text: string) => CLISpinner
+interface IWorkingTimer {
+  spinner: ISpinny
+  elapsed: number
+}
+
+/* ... */
 type CloneStatus = PromiseSettledResult<IGitCloneStatus>
+type Spinny = Spinnies.SpinnerOptions
+type SpinnyBuilder = (n: string, t: string) => ISpinny
 
 /* ... */
 const DEST_DIR = path.join(__dirname, 'gitexp-out')
@@ -70,9 +88,10 @@ const clone = Git.Clone.clone
 const ffs = util.promisify(fastFolderSize)
 
 const str = (n: Buffer | number): string => n.toString()
+const len = (a: any[] | string): number => a.length
 
 /* ... */
-const formatBytes = (bytes: number, decimals: number = 2): string => {
+const fmtBytes = (bytes: number, decimals: number = 2): string => {
   if (bytes === 0) {
     return '0 Bytes'
   }
@@ -136,22 +155,31 @@ const getFiglets = async (): Promise<string[]> => {
 const censor = (o: string, n: string): string => {
   const c = '*'
   const r = (t: string): string =>
-    t.length < 4
-      ? c.repeat(t.length)
-      : t.slice(0, 3 - t.length).concat(c.repeat((3 - t.length) * -1))
+    len(t) < 4 ? c.repeat(len(t)) : t.slice(0, 3 - len(t)).concat(c.repeat((3 - len(t)) * -1))
 
   return fmt('%s/%s', r(o), r(n))
 }
 
 /* ... */
-const spinner =
-  (sn: SpinnerName): SpinnerBuilder =>
-    (text: string): CLISpinner => {
-      const s = Spinner({ text, spinner: sn, discardStdin: true })
-      s.start()
+const spinnyBuilder = (spinner: SpinnerType): SpinnyBuilder => {
+  const spinnies = new Spinnies({
+    spinner,
+    succeedPrefix: '✔',
+    succeedColor: 'white',
+    failColor: 'white',
+    color: 'white',
+    spinnerColor: 'blueBright'
+  })
 
-      return s
+  return (name, text) => {
+    const ref = spinnies.add(name, { text })
+    return {
+      ref,
+      succeed: (t: string) => spinnies.succeed(name, { text: t }),
+      fail: (t: string) => spinnies.fail(name, { text: t })
     }
+  }
+}
 
 /* ... */
 const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: boolean): void => {
@@ -166,24 +194,25 @@ const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: bool
   const p = fmt('%s/%s completed', _.padStart(str(g.repoClonedCounter), g.counterPad), g.repoTotal)
   const f = g.repoFailedCounter > 0 ? fmt(', %s failed', g.repoFailedCounter.toString()) : ''
 
-  g.spinner.text = fmt('%s | %s', c, p.concat(f))
+  g.spinner.ref.text = fmt('%s | %s', c, p.concat(f))
 }
 
+/* ... */
 const concludeCloneSpinner = async (
   g: IGitCloneSpinner,
   s: CloneStatus[],
   e: CloneStatus[]
 ): Promise<void> => {
   const destDirSize = (await ffs(DEST_DIR)) ?? 0
+  const labelDownloaded = fmt('%s downloaded locally', fmtBytes(destDirSize))
 
-  const labelBytesDownloaded = fmt('%s downloaded locally', formatBytes(destDirSize))
-  const labelCloned = fmt('cloned %s/%s', _.padStart(str(s.length), g.counterPad), g.repoTotal)
+  const cloned = fmt('%s/%s', _.padStart(str(len(s)), g.counterPad), g.repoTotal)
+  const labelClonedColored = len(e) > 0 ? chalk.bold.red(cloned) : chalk.greenBright(cloned)
 
-  if (e.length === 0) {
-    g.spinner.succeed(fmt('%s (%s)', labelCloned, labelBytesDownloaded))
+  if (len(e) === 0) {
+    g.spinner.succeed(fmt('cloned %s (%s)', labelClonedColored, labelDownloaded))
   } else {
-    const labelClonedWithErrors = fmt('%s failed', e.length)
-    g.spinner.warn(fmt('%s (%s; %s)', labelCloned, labelClonedWithErrors, labelBytesDownloaded))
+    g.spinner.fail(fmt('cloned %s (%s failed; %s)', labelClonedColored, len(e), labelDownloaded))
   }
 }
 
@@ -202,11 +231,12 @@ const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCl
   }
 }
 
+/* ... */
 const createArchive = async (): Promise<string> => {
   return await new Promise((resolve, reject) => {
     const dest = path.join(__dirname, 'gitexp-archive.zip')
 
-    const archive = archiver('zip', { comment: 'generated by gitexpt', zlib: { level: 8 } })
+    const archive = archiver('zip', { comment: 'generated by gitexp', zlib: { level: 8 } })
     const output = fs.createWriteStream(dest)
 
     archive.pipe(output)
@@ -221,26 +251,21 @@ const createArchive = async (): Promise<string> => {
   })
 }
 
-const archive = async (sp: SpinnerBuilder): Promise<void> => {
-  const lb = sp('creating ZIP archive')
+/* ... */
+const archive = async (sb: SpinnyBuilder): Promise<void> => {
+  const taskName = 'zip_archive'
+  const sp = sb(taskName, 'creating ZIP archive')
 
   try {
     const archiveDest = await createArchive()
-
     const destDirSize = (await ffs(DEST_DIR)) ?? 1
     const archive = await fs.promises.stat(archiveDest)
-    const reducedBy = (100 - ((archive.size * 100) / destDirSize)).toFixed(2).concat('%')
+    const reduced = (100 - (archive.size * 100) / destDirSize).toFixed(2).concat('%')
 
-    lb.succeed(
-      fmt(
-        'ZIP archive created with %s (%s size reduction)',
-        formatBytes(archive.size),
-        reducedBy
-      )
-    )
+    sp.succeed(fmt('ZIP archive created (%s, %s size reduction)', fmtBytes(archive.size), reduced))
   } catch (e) {
     const errorMessage = chalk.bold.red(e.toString())
-    lb.fail(errorMessage)
+    sp.fail(errorMessage)
 
     throw e
   }
@@ -259,8 +284,8 @@ const categorizeRepositories = (repos: IRepository[]): IReposStat => {
 }
 
 /* ... */
-const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<IUserData> => {
-  const lb = sp('fetching repositories')
+const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<IUserData> => {
+  const sp = sb('fetchAllRepositories', 'fetching repositories')
 
   const r: IRepository[] = []
   const list = octo.rest.repos.listForAuthenticatedUser
@@ -272,7 +297,7 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
       throw new Error('fuck')
     }
 
-    if (repos.length === 0) {
+    if (len(repos) === 0) {
       break
     }
 
@@ -294,26 +319,19 @@ const fetchAllRepositories = async (sp: SpinnerBuilder, octo: Octokit): Promise<
   const s = categorizeRepositories(r)
   const m = fmt(
     '(%s; %s; %s; %s)',
-    pluralize('public', s.pub.length, true),
-    pluralize('private', s.priv.length, true),
-    pluralize('organization', s.orgs.length, true),
-    pluralize('user', s.users.length, true)
+    plural('public', len(s.pub), true),
+    plural('private', len(s.priv), true),
+    plural('organization', len(s.orgs), true),
+    plural('user', len(s.users), true)
   )
 
-  lb.text = fmt(
-    'found %s %s',
-    pluralize('repository', r.length, true),
-    (r.length, r.length > 0 ? m : '')
-  )
-
-  lb.succeed()
-
+  sp.succeed(fmt('found %s %s', plural('repository', len(r), true), (len(r), len(r) > 0 ? m : '')))
   return { repositories: r, stats: s }
 }
 
 /* ... */
-const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
-  const lb = sp('authenticating')
+const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
+  const sp = sb('authenticate', 'authenticating')
 
   try {
     const octo = new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN })
@@ -321,15 +339,54 @@ const authenticate = async (sp: SpinnerBuilder): Promise<Octokit> => {
 
     const login = chalk.cyan(fmt('@%s', authUser.login))
     const name = authUser.name !== undefined ? fmt('(%s)', chalk.italic(authUser.name)) : ''
-    lb.succeed(fmt('authenticated as %s %s', login, name))
+    sp.succeed(fmt('authenticated as %s %s', login, name))
 
     return octo
   } catch (e) {
     const errorMessage = chalk.bold.red(e.toString())
-    lb.fail(errorMessage.concat(' -- is your token valid? did you export it?'))
+    sp.fail(errorMessage.concat(' -- is your token valid? did you export it?'))
 
     throw e
   }
+}
+
+/* ... */
+const tickTimer = (wt: IWorkingTimer): void => {
+  wt.elapsed += 100
+  wt.spinner.ref.text = fmt('working... %s seconds elapsed', (wt.elapsed / 1000).toFixed(2))
+}
+
+/* ... */
+const getElapsedTimeFormatted = (start: Date): string => {
+  const end = new Date()
+  const elapsedTime = differenceInSeconds(end, start)
+
+  const q = (x: number, v: string): { value: number, ext: string } => ({
+    value: x,
+    ext: plural(v, x, true)
+  })
+
+  const t = [
+    q(elapsedTime, 'second'),
+    q(secondsToMinutes(elapsedTime), 'minute'),
+    q(secondsToHours(elapsedTime), 'hour')
+  ]
+
+  const segs = t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)
+  const template = (() => {
+    switch (segs) {
+      case 1:
+        return '%s'
+
+      case 2:
+        return '%s and %s'
+
+      default:
+        return '%s, %s and %s'
+    }
+  })()
+
+  return fmt(template, ...t.filter((i) => i.value > 0).map((i) => i.ext))
 }
 
 /* ... */
@@ -337,7 +394,7 @@ const displayBanner = async (): Promise<void> => {
   clear()
 
   const figlets = await getFiglets()
-  const banner = figlets.length > 0 ? _.sample(figlets) : ''
+  const banner = len(figlets) > 0 ? _.sample(figlets) : ''
 
   console.log(fmt('\n%s\n', chalk.gray(banner)))
 }
@@ -345,18 +402,23 @@ const displayBanner = async (): Promise<void> => {
 /* ... */
 const main = async (): Promise<void> => {
   await displayBanner()
-  const sp = spinner('point')
 
-  const octo = await authenticate(sp)
-  const { repositories: rps } = await fetchAllRepositories(sp, octo)
+  const startTS = new Date()
+  const sb = spinnyBuilder(cliSpinner.point)
+
+  const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
+  const gewt = setInterval(tickTimer, 100, wt)
+
+  const octo = await authenticate(sb)
+  const { repositories: rps } = await fetchAllRepositories(sb, octo)
 
   const gcs: IGitCloneSpinner = {
     repoClonedCounter: 0,
     repoFailedCounter: 0,
-    repoTotal: str(rps.length),
-    counterPad: str(rps.length).length,
-    repoNamePad: rps.map((r) => r.fullName).reduce((a, b) => (a.length > b.length ? a : b)).length,
-    spinner: sp('cloning repositories')
+    repoTotal: str(len(rps)),
+    counterPad: len(str(len(rps))),
+    repoNamePad: len(rps.map((r) => r.fullName).reduce((a, b) => (len(a) > len(b) ? a : b))),
+    spinner: sb('cloning', 'cloning repositories')
   }
 
   const repoCloneStatus: CloneStatus[] = []
@@ -372,13 +434,16 @@ const main = async (): Promise<void> => {
   const clonedWithErrors = _.xor(repoCloneStatus, clonedSuccessfully)
 
   await concludeCloneSpinner(gcs, clonedSuccessfully, clonedWithErrors)
-  await archive(sp)
+  await archive(sb)
+
+  clearInterval(gewt)
+  wt.spinner.succeed(fmt('job finished in %s', getElapsedTimeFormatted(startTS)))
 }
 
 main().catch(() => process.exit(1))
 
 /*
-(%%%START | font rev
+(%%%START | font: rev
 
 ======================================
 =============  =======================
@@ -390,7 +455,7 @@ main().catch(() => process.exit(1))
 ==   ===  ===   ===   ===  =  ==  ====
 ======================================
 
-(%%%DIV | font speed
+(%%%DIV | font: speed
 
         __________
 _______ ___(_)_  /_________  _________
@@ -399,15 +464,20 @@ _  /_/ /_  / / /_ /  __/_>  < __  /_/ /
 _\__, / /_/  \__/ \___//_/|_| _  .___/
 /____/                        /_/
 
-(%%%DIV | font sblood
+(%%%DIV | font: poison
 
- @@@@@@@  @@@ @@@@@@@ @@@@@@@@ @@@  @@@ @@@@@@@
-!@@       @@!   @@!   @@!      @@!  !@@ @@!  @@@
-!@! @!@!@ !!@   @!!   @!!!:!    !@@!@!  @!@@!@!
-:!!   !!: !!:   !!:   !!:       !: :!!  !!:
- :: :: :  :      :    : :: ::: :::  :::  :
+ @@@@@@@@  @@@  @@@@@@@  @@@@@@@@  @@@  @@@  @@@@@@@
+@@@@@@@@@  @@@  @@@@@@@  @@@@@@@@  @@@  @@@  @@@@@@@@
+!@@        @@!    @@!    @@!       @@!  !@@  @@!  @@@
+!@!        !@!    !@!    !@!       !@!  @!!  !@!  @!@
+!@! @!@!@  !!@    @!!    @!!!:!     !@@!@!   @!@@!@!
+!!! !!@!!  !!!    !!!    !!!!!:      @!!!    !!@!!!
+:!!   !!:  !!:    !!:    !!:        !: :!!   !!:
+:!:   !::  :!:    :!:    :!:       :!:  !:!  :!:
+ ::: ::::   ::     ::     :: ::::   ::  :::   ::
+ :: :: :   :       :     : :: ::    :   ::    :
 
-(%%%DIV | font nancyj-fancy
+(%%%DIV | font: nancyj-fancy
 
          oo   dP
               88
@@ -418,7 +488,7 @@ _\__, / /_/  \__/ \___//_/|_| _  .___/
      .88                             88
  d8888P                              dP
 
-(%%%DIV | font lean
+(%%%DIV | font: lean
 
               _/    _/
      _/_/_/      _/_/_/_/    _/_/    _/    _/  _/_/_/
@@ -428,7 +498,7 @@ _\__, / /_/  \__/ \___//_/|_| _  .___/
      _/                                    _/
 _/_/                                      _/
 
-(%%%DIV | font larry3d
+(%%%DIV | font: larry3d
 
           __
        __/\ \__
@@ -440,7 +510,7 @@ _/_/                                      _/
    /\____/                        \ \_\
    \_/__/                          \/_/
 
-(%%%DIV | font fender
+(%%%DIV | font: fender
 
               ||
         ''    ||
@@ -450,7 +520,7 @@ _/_/                                      _/
     ||                             ||
  `..|'                            .||
 
-(%%%DIV | font graffiti
+(%%%DIV | font: graffiti
 
         .__  __
    ____ |__|/  |_  ____ ___  _________
@@ -459,5 +529,27 @@ _/_/                                      _/
  \___  /|__||__|  \___  >__/\_ \|   __/
 /_____/               \/      \/|__|
 
-(%%%END
+(%%%DIV | font: merlin1
+
+  _______   __  ___________  _______  ___  ___    _______
+ /" _   "| |" \("     _   ")/"     "||"  \/"  |  |   __ "\
+(: ( \___) ||  |)__/  \\__/(: ______) \   \  /   (. |__) :)
+ \/ \      |:  |   \\_ /    \/    |    \\  \/    |:  ____/
+ //  \ ___ |.  |   |.  |    // ___)_   /\.  \    (|  /
+(:   _(  _|/\  |\  \:  |   (:      "| /  \   \  /|__/ \
+ \_______)(__\_|_)  \__|    \_______)|___/\___|(_______)
+
+(%%%DIV | font: bloody
+
+  ▄████  ██▓▄▄▄█████▓▓█████ ▒██   ██▒ ██▓███
+ ██▒ ▀█▒▓██▒▓  ██▒ ▓▒▓█   ▀ ▒▒ █ █ ▒░▓██░  ██▒
+▒██░▄▄▄░▒██▒▒ ▓██░ ▒░▒███   ░░  █   ░▓██░ ██▓▒
+░▓█  ██▓░██░░ ▓██▓ ░ ▒▓█  ▄  ░ █ █ ▒ ▒██▄█▓▒ ▒
+░▒▓███▀▒░██░  ▒██▒ ░ ░▒████▒▒██▒ ▒██▒▒██▒ ░  ░
+ ░▒   ▒ ░▓    ▒ ░░   ░░ ▒░ ░▒▒ ░ ░▓ ░▒▓▒░ ░  ░
+  ░   ░  ▒ ░    ░     ░ ░  ░░░   ░▒ ░░▒ ░
+░ ░   ░  ▒ ░  ░         ░    ░    ░  ░░
+      ░  ░              ░  ░ ░    ░
+
+(%%%END <https://patorjk.com/software/taag/>
  */
