@@ -19,6 +19,11 @@ import Spinnies from 'spinnies'
 import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
 
 /* ... */
+interface IHash {
+  [key: string]: any
+}
+
+/* ... */
 interface IRepository {
   name: string
   fullName: string
@@ -108,11 +113,7 @@ const getFiglets = async (): Promise<string[]> => {
   const fig: string[] = []
 
   const t = (n: string): string => '(%%%' + n.toUpperCase()
-  const tag = {
-    start: t('start'),
-    end: t('end'),
-    div: t('div')
-  }
+  const tag = Object.fromEntries(['start', 'end', 'div'].map((i) => [i, t(i)]))
 
   try {
     let foundStart = false
@@ -299,8 +300,8 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
       break
     }
 
-    for (const repo of repos) {
-      r.push({
+    r.push(
+      ...repos.map((repo) => ({
         name: repo.name,
         fullName: repo.full_name,
         url: repo.clone_url,
@@ -310,8 +311,8 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
           name: _.first(repo.full_name.split('/'))!,
           isOrg: repo.owner?.type.toLowerCase() === 'organization'
         }
-      })
-    }
+      }))
+    )
   }
 
   const s = categorizeRepositories(r)
@@ -356,29 +357,21 @@ const tickTimer = (wt: IWorkingTimer): void => {
 
 /* ... */
 const getElapsedTimeFormatted = (start: Date): string => {
-  const end = new Date()
-  const elapsedTime = differenceInSeconds(end, start)
+  const elapsedTime = differenceInSeconds(new Date(), start)
 
-  const q = (x: number, v: string): { value: number, ext: string } => ({
-    value: x,
-    ext: plural(v, x, true)
-  })
-
+  const q = (x: number, v: string): IHash => ({ value: x, ext: plural(v, x, true) })
   const t = [
     q(elapsedTime, 'second'),
     q(secondsToMinutes(elapsedTime), 'minute'),
     q(secondsToHours(elapsedTime), 'hour')
   ]
 
-  const segs = t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)
   const template = (() => {
-    switch (segs) {
+    switch (t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)) {
       case 1:
         return '%s'
-
       case 2:
         return '%s and %s'
-
       default:
         return '%s, %s and %s'
     }
