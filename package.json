@@ -2,7 +2,7 @@
   "name": "gitexp",
   "version": "0.1.0",
   "description": "",
-  "main": "dist/index.js",
+  "main": "dist/gitexp.js",
   "author": "Caian Ertl <hi@caian.org>",
   "license": "CC0-1.0",
   "repository": {
@@ -20,10 +20,10 @@
   "homepage": "https://github.com/caian-org/gitexp#readme",
   "scripts": {
     "all": "npm run build:js && npm run fix:style && npm run check:all && npm run clean",
-    "start": "node dist/index.js",
-    "start:ts": "ts-node src/index.ts",
-    "build:js": "swc src --out-dir dist & tsc --skipLibCheck --noEmit",
-    "build:js:release": "swc src --out-dir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
+    "start": "node dist/gitexp.js",
+    "start:ts": "ts-node gitexp.ts",
+    "build:js": "tsc --skipLibCheck",
+    "build:js:release": "tsc --skipLibCheck --outDir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
     "build:js:clean": "rm -rf dist && npm run build:js",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
@@ -35,12 +35,9 @@
     "check:all": "npm run check:build && npm run check:lint && npm run check:style && npm run check:duplicated",
     "fix:style": "npm run prettify '**/*.ts' && standardx --fix '**/*.ts'",
     "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
-    "clean": "rm -rf dist report",
+    "clean": "rm -rf dist report lib",
     "commit": "cz",
     "prepare": "[ \"$NODE_ENV\" == \"production\" ] && exit 0; husky install"
-  },
-  "_moduleAliases": {
-    "@ge": "dist"
   },
   "standardx": {
     "parser": "@typescript-eslint/parser",
@@ -79,8 +76,6 @@
   "devDependencies": {
     "@commitlint/cli": "^13.1.0",
     "@commitlint/config-conventional": "^13.1.0",
-    "@swc/cli": "^0.1.46",
-    "@swc/core": "^1.2.75",
     "@types/archiver": "^5.1.1",
     "@types/clear": "^0.1.2",
     "@types/inquirer": "^7.3.3",
@@ -118,11 +113,9 @@
     "fast-folder-size": "^1.4.0",
     "inquirer": "^8.1.2",
     "lodash": "^4.17.21",
-    "module-alias": "^2.2.2",
     "nodegit": "^0.27.0",
     "octokit": "^1.3.0",
     "pluralize": "^8.0.0",
-    "regenerator-runtime": "^0.13.9",
     "spinnies": "git+https://github.com/caian-org/spinnies.git#v1.0.0"
   }
 }

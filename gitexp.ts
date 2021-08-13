@@ -4,7 +4,6 @@ import path from 'path'
 import util from 'util'
 
 /* core features */
-import 'module-alias/register'
 import _ from 'lodash'
 import Git from 'nodegit'
 import archiver from 'archiver'
@@ -232,7 +231,7 @@ const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCl
 }
 
 /* ... */
-const createArchive = async (): Promise<string> => {
+const zipCloned = async (): Promise<string> => {
   return await new Promise((resolve, reject) => {
     const dest = path.join(__dirname, 'gitexp-archive.zip')
 
@@ -252,12 +251,11 @@ const createArchive = async (): Promise<string> => {
 }
 
 /* ... */
-const archive = async (sb: SpinnyBuilder): Promise<void> => {
-  const taskName = 'zip_archive'
-  const sp = sb(taskName, 'creating ZIP archive')
+const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
+  const sp = sb('archive', 'creating ZIP archive')
 
   try {
-    const archiveDest = await createArchive()
+    const archiveDest = await zipCloned()
     const destDirSize = (await ffs(DEST_DIR)) ?? 1
     const archive = await fs.promises.stat(archiveDest)
     const reduced = (100 - (archive.size * 100) / destDirSize).toFixed(2).concat('%')
@@ -352,7 +350,7 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
 
 /* ... */
 const tickTimer = (wt: IWorkingTimer): void => {
-  wt.elapsed += 100
+  wt.elapsed += 50
   wt.spinner.ref.text = fmt('working... %s seconds elapsed', (wt.elapsed / 1000).toFixed(2))
 }
 
@@ -407,7 +405,7 @@ const main = async (): Promise<void> => {
   const sb = spinnyBuilder(cliSpinner.point)
 
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
-  const gewt = setInterval(tickTimer, 100, wt)
+  const gewt = setInterval(tickTimer, 50, wt)
 
   const octo = await authenticate(sb)
   const { repositories: rps } = await fetchAllRepositories(sb, octo)
@@ -422,7 +420,7 @@ const main = async (): Promise<void> => {
   }
 
   const repoCloneStatus: CloneStatus[] = []
-  for (const chunk of _.chunk(rps, 5)) {
+  for (const chunk of _.chunk(rps, 10)) {
     // eslint-disable-next-line
     const calls = chunk.map((repo) => cloneLocally(gcs, repo))
 
@@ -434,7 +432,7 @@ const main = async (): Promise<void> => {
   const clonedWithErrors = _.xor(repoCloneStatus, clonedSuccessfully)
 
   await concludeCloneSpinner(gcs, clonedSuccessfully, clonedWithErrors)
-  await archive(sb)
+  await createClonedZIPArchive(sb)
 
   clearInterval(gewt)
   wt.spinner.succeed(fmt('job finished in %s', getElapsedTimeFormatted(startTS)))
