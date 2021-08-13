@@ -11,23 +11,23 @@ FROM base AS package
 USER root
 COPY package.json .
 COPY package-lock.json .
+RUN apk add --virtual .vdeps git
 
 FROM package AS prod-deps
 RUN npm i --only=production
 RUN chown -R turing:turing node_modules package.json package-lock.json
+RUN apk del .vdeps
 
 FROM package AS dev-deps
 RUN npm i
-RUN npm i --save-dev @swc/core-linux-musl
 
 FROM dev-deps AS build
-COPY src src
+COPY gitexp.ts .
 COPY tsconfig.json .
-COPY .swcrc .
-RUN npm run build:js
-RUN chown -R turing:turing dist
+RUN npm run build:js:release
+RUN chown -R turing:turing lib
 
 FROM prod-deps AS run
 USER turing
-COPY --from=build ["/home/turing/dist", "./dist"]
-CMD ["npm", "run", "start:cond"]
+COPY --from=build ["/home/turing/lib", "./lib"]
+CMD ["node", "lib/gitexp.js"]
