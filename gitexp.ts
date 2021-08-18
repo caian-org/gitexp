@@ -18,6 +18,10 @@ import plural from 'pluralize'
 import Spinnies from 'spinnies'
 import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
 
+/* -------------------------------------------------------------------------
+                               TYPES & INTERFACES
+   ------------------------------------------------------------------------- */
+
 /* ... */
 interface IHash {
   [key: string]: any
@@ -84,6 +88,10 @@ type CloneStatus = PromiseSettledResult<IGitCloneStatus>
 type Spinny = Spinnies.SpinnerOptions
 type SpinnyBuilder = (n: string, t: string) => ISpinny
 
+/* -------------------------------------------------------------------------
+                              HELPERS & UTILITIES
+   ------------------------------------------------------------------------- */
+
 /* ... */
 const DEST_DIR = path.join(__dirname, 'gitexp-out')
 
@@ -106,6 +114,31 @@ const fmtBytes = (bytes: number, decimals: number = 2): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
   return fmt('%s %s', str(parseFloat((bytes / Math.pow(k, i)).toFixed(dm))), sizes[i])
+}
+
+/* ... */
+const getElapsedTimeFormatted = (start: Date): string => {
+  const elapsedTime = differenceInSeconds(new Date(), start)
+
+  const q = (x: number, v: string): IHash => ({ value: x, ext: plural(v, x, true) })
+  const t = [
+    q(elapsedTime, 'second'),
+    q(secondsToMinutes(elapsedTime), 'minute'),
+    q(secondsToHours(elapsedTime), 'hour')
+  ]
+
+  const template = (() => {
+    switch (t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)) {
+      case 1:
+        return '%s'
+      case 2:
+        return '%s and %s'
+      default:
+        return '%s, %s and %s'
+    }
+  })()
+
+  return fmt(template, ...t.filter((i) => i.value > 0).map((i) => i.ext))
 }
 
 /* ... */
@@ -152,6 +185,16 @@ const getFiglets = async (): Promise<string[]> => {
 }
 
 /* ... */
+const displayBanner = async (): Promise<void> => {
+  clear()
+
+  const figlets = await getFiglets()
+  const banner = len(figlets) > 0 ? _.sample(figlets) : ''
+
+  console.log(fmt('\n%s\n', chalk.gray(banner)))
+}
+
+/* ... */
 const censor = (o: string, n: string): string => {
   const c = '*'
   const r = (t: string): string =>
@@ -159,6 +202,10 @@ const censor = (o: string, n: string): string => {
 
   return fmt('%s/%s', r(o), r(n))
 }
+
+/* -------------------------------------------------------------------------
+                                  CLI SPINNERS
+   ------------------------------------------------------------------------- */
 
 /* ... */
 const spinnyBuilder = (spinner: SpinnerType): SpinnyBuilder => {
@@ -215,6 +262,16 @@ const concludeCloneSpinner = async (
     g.spinner.fail(fmt('cloned %s (%s failed; %s)', labelClonedColored, len(e), labelDownloaded))
   }
 }
+
+/* ... */
+const tickTimer = (wt: IWorkingTimer): void => {
+  wt.elapsed += 50
+  wt.spinner.ref.text = fmt('working... %s seconds elapsed', (wt.elapsed / 1000).toFixed(2))
+}
+
+/* -------------------------------------------------------------------------
+                           GIT / GITHUB INTERACTIONS
+   ------------------------------------------------------------------------- */
 
 /* ... */
 const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
@@ -349,46 +406,9 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
   }
 }
 
-/* ... */
-const tickTimer = (wt: IWorkingTimer): void => {
-  wt.elapsed += 50
-  wt.spinner.ref.text = fmt('working... %s seconds elapsed', (wt.elapsed / 1000).toFixed(2))
-}
-
-/* ... */
-const getElapsedTimeFormatted = (start: Date): string => {
-  const elapsedTime = differenceInSeconds(new Date(), start)
-
-  const q = (x: number, v: string): IHash => ({ value: x, ext: plural(v, x, true) })
-  const t = [
-    q(elapsedTime, 'second'),
-    q(secondsToMinutes(elapsedTime), 'minute'),
-    q(secondsToHours(elapsedTime), 'hour')
-  ]
-
-  const template = (() => {
-    switch (t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)) {
-      case 1:
-        return '%s'
-      case 2:
-        return '%s and %s'
-      default:
-        return '%s, %s and %s'
-    }
-  })()
-
-  return fmt(template, ...t.filter((i) => i.value > 0).map((i) => i.ext))
-}
-
-/* ... */
-const displayBanner = async (): Promise<void> => {
-  clear()
-
-  const figlets = await getFiglets()
-  const banner = len(figlets) > 0 ? _.sample(figlets) : ''
-
-  console.log(fmt('\n%s\n', chalk.gray(banner)))
-}
+/* -------------------------------------------------------------------------
+                                  ENTRYPOINT
+   ------------------------------------------------------------------------- */
 
 /* ... */
 const main = async (): Promise<void> => {
