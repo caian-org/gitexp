@@ -9,6 +9,7 @@ import Git from 'nodegit'
 import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from 'octokit'
+import { Command, Option, OptionValues } from 'commander'
 import { differenceInSeconds, secondsToMinutes, secondsToHours } from 'date-fns'
 
 /* aesthetic stuff */
@@ -81,6 +82,26 @@ interface IGitCloneStatus {
 interface IWorkingTimer {
   spinner: ISpinny
   elapsed: number
+}
+
+/* ... */
+interface ICloneFilters {
+  visibility: RepoVisibility
+  ownerType: RepoOwnerType
+  onlyFrom: string[] | null
+  languages: string[] | null
+}
+
+enum RepoVisibility {
+  ALL = 'all',
+  PUBLIC = 'public',
+  PRIVATE = 'private'
+}
+
+enum RepoOwnerType {
+  ALL = 'all',
+  USER = 'user',
+  ORG = 'org'
 }
 
 /* ... */
@@ -208,7 +229,7 @@ const censor = (o: string, n: string): string => {
    ------------------------------------------------------------------------- */
 
 /* ... */
-const spinnyBuilder = (spinner: SpinnerType): SpinnyBuilder => {
+const spinnyBuilder = (spinner: SpinnerType, suppress: boolean = false): SpinnyBuilder => {
   const spinnies = new Spinnies({
     spinner,
     succeedPrefix: '✔',
@@ -217,6 +238,13 @@ const spinnyBuilder = (spinner: SpinnerType): SpinnyBuilder => {
     color: 'white',
     spinnerColor: 'blueBright'
   })
+
+  if (suppress) {
+    return (..._: string[]) => {
+      const fn = (_: string): void => {}
+      return { ref: { text: '' }, succeed: fn, fail: fn }
+    }
+  }
 
   return (name, text) => {
     const ref = spinnies.add(name, { text })
@@ -363,7 +391,7 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
         fullName: repo.full_name,
         url: repo.clone_url,
         isPrivate: repo.private,
-        lang: repo.language ?? 'NONE',
+        lang: (repo.language ?? 'null').toLowerCase(),
         owner: {
           name: _.first(repo.full_name.split('/'))!,
           isOrg: repo.owner?.type.toLowerCase() === 'organization'
@@ -407,33 +435,121 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
 }
 
 /* -------------------------------------------------------------------------
-                                  ENTRYPOINT
+                             CLI & USER INTERACTION
+   ------------------------------------------------------------------------- */
+
+/* ... */
+const parseCommandLineArgs = (args: string[]): OptionValues => {
+  const commaList = (value: string, _: any): string[] =>
+    value
+      .split(',')
+      .map((i) => i.trim())
+      .filter((i) => len(i) > 1)
+
+  const owner = new Option('-t, --owner-type <type>', 'filter by owner type')
+  const visibility = new Option('-b, --visibility <level>', 'filter by repository visibility')
+  const items = (o: object): string[] => Object.values(o).filter((v) => v !== 'all')
+
+  return new Command()
+    .version('1.0.0', '-v, --version')
+    .option('-s, --summary', 'display a summary of repositories, languages, orgs etc')
+    .option('-i, --interactive', 'set the running options interactively')
+    .option('-l, --languages <langs>', 'filter by project language (comma separated)', commaList)
+    .option('-f, --only-from <name>', 'filter by owner name (comma separated)', commaList)
+    .addOption(owner.choices(items(RepoOwnerType)))
+    .addOption(visibility.choices(items(RepoVisibility)))
+    .parse(args)
+    .opts()
+}
+
+/* ... */
+const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
+  visibility: opts.visibility ?? RepoVisibility.ALL,
+  ownerType: opts.ownerType ?? RepoOwnerType.ALL,
+  onlyFrom: opts.onlyFrom ?? null,
+  languages: opts.languages ?? null
+})
+
+/* ... */
+const showGithubSummary = (repos: IRepository[]): void => {
+  console.log(repos)
+}
+
+/* ... */
+// @ts-expect-error
+const getRunningOptionsInteractively = (): ICloneFilters => {}
+
+/* ... */
+const filterReposByUserInput = (repositories: IRepository[], f: ICloneFilters): IRepository[] =>
+  repositories
+    /* repository visibility filter; should only gets public? or private? or both? */
+    .filter(
+      (r) =>
+        f.visibility === RepoVisibility.ALL ||
+        (r.isPrivate && f.visibility === RepoVisibility.PRIVATE) ||
+        (!r.isPrivate && f.visibility === RepoVisibility.PUBLIC)
+    )
+
+    /* repository main language filter; gets only if the main lang is X (python, js etc) */
+    .filter((r) => f.languages === null || f.languages.includes(r.lang))
+
+    /* repository owner filter; gets only if the owner is X */
+    .filter((r) => f.onlyFrom === null || f.onlyFrom.includes(r.owner.name))
+
+    /* repository owner type filter; should only gets repos from orgs? or users? or both? */
+    .filter(
+      (r) =>
+        f.ownerType === RepoOwnerType.ALL ||
+        (r.owner.isOrg && f.ownerType === RepoOwnerType.ORG) ||
+        (!r.owner.isOrg && f.ownerType === RepoOwnerType.USER)
+    )
+
+/* -------------------------------------------------------------------------
+                                   ENTRYPOINT
    ------------------------------------------------------------------------- */
 
 /* ... */
 const main = async (): Promise<void> => {
-  await displayBanner()
+  const cliOptions = parseCommandLineArgs(process.argv)
 
+  await displayBanner()
   const startTS = new Date()
-  const sb = spinnyBuilder(cliSpinner.point)
+
+  // ---
+  const showSummary = cliOptions.summary !== undefined
+  const runInteractive = cliOptions.interactive !== undefined
+
+  const suppressLoadingSpinners = showSummary
+  const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
+
+  // ---
+  const octo = await authenticate(sb)
+  const { repositories } = await fetchAllRepositories(sb, octo)
+
+  if (showSummary) {
+    showGithubSummary(repositories)
+    return
+  }
+
+  const reposF = filterReposByUserInput(
+    repositories,
+    runInteractive ? getRunningOptionsInteractively() : setArgsFallback(cliOptions)
+  )
 
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
   const gewt = setInterval(tickTimer, 50, wt)
 
-  const octo = await authenticate(sb)
-  const { repositories: rps } = await fetchAllRepositories(sb, octo)
-
   const gcs: IGitCloneSpinner = {
     repoClonedCounter: 0,
     repoFailedCounter: 0,
-    repoTotal: str(len(rps)),
-    counterPad: len(str(len(rps))),
-    repoNamePad: len(rps.map((r) => r.fullName).reduce((a, b) => (len(a) > len(b) ? a : b))),
+    repoTotal: str(len(reposF)),
+    counterPad: len(str(len(reposF))),
+    repoNamePad: len(reposF.map((r) => r.fullName).reduce((a, b) => (len(a) > len(b) ? a : b))),
     spinner: sb('cloning', 'cloning repositories')
   }
 
   const repoCloneStatus: CloneStatus[] = []
-  for (const chunk of _.chunk(rps, 10)) {
+  for (const chunk of _.chunk(reposF, 10)) {
     // eslint-disable-next-line
     const calls = chunk.map((repo) => cloneLocally(gcs, repo))
 
