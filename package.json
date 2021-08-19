@@ -21,22 +21,27 @@
   "scripts": {
     "all": "npm run build:js && npm run build:js:release && npm run fix:style && npm run check:all && npm run clean",
     "start": "node dist/gitexp.js",
-    "start:ts": "ts-node gitexp.ts",
+    "start:ts": "ts-node src/gitexp.ts",
     "build:js": "tsc --skipLibCheck",
     "build:js:release": "tsc --skipLibCheck --outDir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
     "build:js:clean": "rm -rf dist && npm run build:js",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
     "bump:all": "npm run bump:dev && npm run bump:prod",
-    "check:lint": "eslint --format=codeframe gitexp.ts",
-    "check:style": "standardx gitexp.ts",
+    "check:lint": "eslint --format=codeframe src/gitexp.ts",
+    "check:style": "standardx src/gitexp.ts",
     "check:duplicated": "jscpd",
     "check:all": "npm run check:lint && npm run check:style && npm run check:duplicated",
-    "fix:style": "npm run prettify gitexp.ts && standardx --fix gitexp.ts",
+    "fix:style": "npm run prettify src/gitexp.ts && standardx --fix src/gitexp.ts",
     "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
     "clean": "rm -rf dist report lib",
     "commit": "cz",
     "prepare": "[ \"$NODE_ENV\" == \"production\" ] && exit 0; husky install"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   },
   "standardx": {
     "parser": "@typescript-eslint/parser",
@@ -67,9 +72,40 @@
       "**/report/**"
     ]
   },
-  "config": {
-    "commitizen": {
-      "path": "./node_modules/cz-conventional-changelog"
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "**/src/**/*.{js,jsx,ts,tsx}",
+      "!dist/**/*.js",
+      "!src/index.ts"
+    ],
+    "moduleFileExtensions": [
+      "js",
+      "jsx",
+      "json",
+      "ts",
+      "tsx"
+    ],
+    "transform": {
+      "^.+\\.(ts|tsx)$": "ts-jest"
+    },
+    "globals": {
+      "ts-jest": {
+        "tsconfig": "tsconfig.json"
+      }
+    },
+    "testPathIgnorePatterns": [
+      "/dist/",
+      "/node_modules/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 80
+      }
+    },
+    "moduleNameMapper": {
+      "^@gitexp/(.*)$": "<rootDir>/src/$1"
     }
   },
   "devDependencies": {
@@ -78,6 +114,7 @@
     "@types/archiver": "^5.1.1",
     "@types/clear": "^0.1.2",
     "@types/inquirer": "^7.3.3",
+    "@types/jest": "^27.0.1",
     "@types/lodash": "^4.14.172",
     "@types/node": "^16.6.1",
     "@types/nodegit": "^0.27.3",
@@ -89,15 +126,18 @@
     "eslint": "^7.32.0",
     "eslint-config-standard-with-typescript": "^20.0.0",
     "eslint-plugin-import": "^2.24.0",
+    "eslint-plugin-jest": "^24.4.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^4.3.1",
     "eslint-plugin-standard": "^5.0.0",
     "husky": "^7.0.1",
+    "jest": "^27.0.6",
     "jscpd": "^3.3.26",
     "lint-staged": "^11.1.2",
     "npm-check-updates": "^11.8.3",
     "prettier": "^2.3.2",
     "standardx": "^7.0.0",
+    "ts-jest": "^27.0.5",
     "ts-node": "^10.2.0",
     "typescript": "^4.3.5",
     "vrelease-bin": "^0.3.1"
