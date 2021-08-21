@@ -1,7 +1,6 @@
-FROM node:14.17.0-stretch-slim AS base
+FROM node:14.17.0-alpine AS base
 RUN npm i -g npm@latest
-RUN apt-get update
-RUN apt-get install --no-install-recommends -y git
+RUN apk add git
 
 FROM base AS package
 COPY package.json .
