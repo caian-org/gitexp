@@ -5,7 +5,7 @@ import util from 'util'
 
 /* core features */
 import _ from 'lodash'
-import Git from 'nodegit'
+import Git from 'simple-git'
 import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from 'octokit'
@@ -73,12 +73,6 @@ interface IGitCloneSpinner {
 }
 
 /* ... */
-interface IGitCloneStatus {
-  repository: IRepository
-  status: Git.Repository
-}
-
-/* ... */
 interface IWorkingTimer {
   spinner: ISpinny
   elapsed: number
@@ -105,7 +99,7 @@ enum RepoOwnerType {
 }
 
 /* ... */
-type CloneStatus = PromiseSettledResult<IGitCloneStatus>
+type CloneStatus = PromiseSettledResult<IRepository>
 type Spinny = Spinnies.SpinnerOptions
 type SpinnyBuilder = (n: string, t: string) => ISpinny
 
@@ -117,7 +111,6 @@ type SpinnyBuilder = (n: string, t: string) => ISpinny
 const DEST_DIR = path.join(__dirname, 'gitexp-out')
 
 const fmt = util.format
-const clone = Git.Clone.clone
 const ffs = util.promisify(fastFolderSize)
 
 const str = (n: Buffer | number): string => n.toString()
@@ -302,15 +295,17 @@ const tickTimer = (wt: IWorkingTimer): void => {
    ------------------------------------------------------------------------- */
 
 /* ... */
-const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IGitCloneStatus> => {
+const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IRepository> => {
   const d = path.join(DEST_DIR, r.owner.name)
 
   try {
-    const s = await clone(r.url, path.join(d, r.name))
+    const git = Git()
+    await git.clone(r.url, path.join(d, r.name))
     updateCloneSpinner(g, r, false)
 
-    return { repository: r, status: s }
+    return r
   } catch (e) {
+    console.log(e)
     updateCloneSpinner(g, r, true)
     throw e
   }

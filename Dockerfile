@@ -1,14 +1,15 @@
-FROM node:14.17.0-stretch AS base
-MAINTAINER Caian R. Ertl <hi@caian.org>
+FROM node:14.17.0-stretch-slim AS base
+RUN npm i -g npm@latest
+RUN apt-get update
+RUN apt-get install --no-install-recommends -y git
 
 FROM base AS package
 COPY package.json .
 COPY package-lock.json .
-RUN apt-get install -y git
 
 FROM package AS prod-deps
+RUN export NODE_ENV="production"
 RUN npm i --only=production
-RUN apt-get install -y libgssapi-krb5-2
 
 FROM package AS dev-deps
 RUN npm i
