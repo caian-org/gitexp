@@ -31,7 +31,7 @@
     "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
     "clean": "rm -rf dist report lib",
     "commit": "cz",
-    "prepare": "[ \"$NODE_ENV\" == \"production\" ] && exit 0; husky install"
+    "prepare": "[ \"$NODE_ENV\" = \"production\" ] && exit 0; husky install"
   },
   "config": {
     "commitizen": {
