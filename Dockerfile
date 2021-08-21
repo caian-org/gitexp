@@ -1,4 +1,4 @@
-FROM node:14.17.0-alpine AS base
+FROM node:16-alpine AS base
 RUN npm i -g npm@latest
 RUN apk add git
 
