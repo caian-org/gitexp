@@ -1,4 +1,4 @@
-name: code-check
+name: Perform code checkings
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout to yatt
+      - name: Checkout to gitexp
         uses: actions/checkout@v2
 
       - name: Set up NodeJS 14
@@ -33,4 +33,4 @@ jobs:
         run: npm i
 
       - name: Perform code checkings
-        run: npm run check:lint && npm run check:style && npm run check:duplicated
+        run: npm run check:all
