@@ -18,7 +18,6 @@
     "start": "node dist/gitexp.js",
     "start:ts": "ts-node src/gitexp.ts",
     "build:js": "tsc",
-    "build:js:release": "tsc --outDir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
     "build:js:clean": "rm -rf dist && npm run build:js",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
@@ -29,7 +28,7 @@
     "check:all": "npm run check:lint && npm run check:style && npm run check:duplicated",
     "fix:style": "npm run prettify src/gitexp.ts && standardx --fix src/gitexp.ts",
     "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
-    "clean": "rm -rf dist report lib",
+    "clean": "rm -rf dist report",
     "commit": "cz",
     "prepare": "[ \"$NODE_ENV\" = \"production\" ] && exit 0; husky install"
   },
@@ -149,6 +148,6 @@
     "lodash": "^4.17.21",
     "pluralize": "^8.0.0",
     "simple-git": "^2.44.0",
-    "spinnies": "git+https://github.com/caian-org/spinnies.git#v1.0.0"
+    "spinnies-ts": "github:caian-org/spinnies-ts#v0.6.0"
   }
 }
