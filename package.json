@@ -17,8 +17,8 @@
     "all": "npm run build:js && npm run build:js:release && npm run fix:style && npm run check:all && npm run clean",
     "start": "node dist/gitexp.js",
     "start:ts": "ts-node src/gitexp.ts",
-    "build:js": "tsc --skipLibCheck",
-    "build:js:release": "tsc --skipLibCheck --outDir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
+    "build:js": "tsc",
+    "build:js:release": "tsc --outDir lib && npm run prettify 'lib/*.js' && standard --fix 'lib/*.js' || true",
     "build:js:clean": "rm -rf dist && npm run build:js",
     "bump:dev": "ncu --upgrade --dep dev",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
@@ -137,6 +137,7 @@
     "vrelease-bin": "^0.3.1"
   },
   "dependencies": {
+    "@octokit/rest": "^18.9.1",
     "archiver": "^5.3.0",
     "chalk": "^4.1.2",
     "clear": "^0.1.0",
@@ -146,7 +147,6 @@
     "fast-folder-size": "^1.4.0",
     "inquirer": "^8.1.2",
     "lodash": "^4.17.21",
-    "octokit": "^1.4.0",
     "pluralize": "^8.0.0",
     "simple-git": "^2.44.0",
     "spinnies": "git+https://github.com/caian-org/spinnies.git#v1.0.0"
