@@ -8,7 +8,7 @@ import _ from 'lodash'
 import Git from 'simple-git'
 import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
-import { Octokit } from 'octokit'
+import { Octokit } from '@octokit/rest'
 import { Command, Option, OptionValues } from 'commander'
 import { differenceInSeconds, secondsToMinutes, secondsToHours } from 'date-fns'
 
