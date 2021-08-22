@@ -1,6 +1,5 @@
 FROM node:16-alpine AS base
-RUN npm i -g npm@latest
-RUN apk add git
+RUN apk add --no-cache git
 
 FROM base AS package
 COPY package.json .
