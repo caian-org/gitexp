@@ -11,11 +11,13 @@
 [lgtm-shield]: https://img.shields.io/lgtm/grade/javascript/g/caian-org/github-exporter.svg?logo=lgtm&style=flat-square
 [lgtm-url]: https://lgtm.com/projects/g/caian-org/github-exporter/context:javascript
 
-[docker-img-size-shield]: https://img.shields.io/docker/image-size/caian/gitexp?logo=docker&logoColor=FFF&style=flat-square
+[docker-img-size-shield]: https://img.shields.io/docker/image-size/caian/gitexp?sort=semver&logo=docker&logoColor=FFF&style=flat-square
 [docker-url]: https://hub.docker.com/r/caian/gitexp
 
 [tag-shield]: https://img.shields.io/github/tag/caian-org/gitexp.svg?logo=git&logoColor=FFF&style=flat-square
 [tag-url]: https://github.com/caian-org/gitexp/releases
+
+
 
 
 ## License
