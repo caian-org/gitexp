@@ -6,8 +6,10 @@ COPY package.json .
 COPY package-lock.json .
 
 FROM package AS prod-deps
-RUN export NODE_ENV="production"
-RUN npm i --only=production
+RUN apk add --no-cache curl
+RUN curl -sf https://gobinaries.com/tj/node-prune | sh
+RUN NODE_ENV="production" npm i --only=production
+RUN node-prune
 
 FROM package AS dev-deps
 RUN npm i
@@ -15,8 +17,9 @@ RUN npm i
 FROM dev-deps AS build
 COPY src sc
 COPY tsconfig.json .
-RUN npm run build:js:release
+RUN npm run build:js
 
-FROM prod-deps AS run
-COPY --from=build ["/lib/gitexp.js", "."]
-CMD ["node", "gitexp.js"]
+FROM base AS run
+COPY --from=prod-deps ["/node_modules", "node_modules"]
+COPY --from=build ["/dist/gitexp.js", "."]
+ENTRYPOINT ["node", "gitexp.js"]
