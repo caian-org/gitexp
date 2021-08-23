@@ -16,7 +16,7 @@ import { differenceInSeconds, secondsToMinutes, secondsToHours } from 'date-fns'
 import chalk from 'chalk'
 import clear from 'clear'
 import plural from 'pluralize'
-import Spinnies from 'spinnies'
+import Spinnies from 'spinnies-ts'
 import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
 
 /* -------------------------------------------------------------------------
@@ -49,17 +49,20 @@ interface ISpinny {
 }
 
 /* ... */
-interface IReposStat {
-  pub: string[]
-  priv: string[]
+interface IGitHubStats {
+  repos: {
+    pub: string[]
+    priv: string[]
+  }
   users: string[]
   orgs: string[]
+  langs: Array<{ name: string, occurrences: number }>
 }
 
 /* ... */
 interface IUserData {
   repositories: IRepository[]
-  stats: IReposStat
+  stats: IGitHubStats
 }
 
 /* ... */
@@ -108,13 +111,42 @@ type SpinnyBuilder = (n: string, t: string) => ISpinny
    ------------------------------------------------------------------------- */
 
 /* ... */
-const DEST_DIR = path.join(__dirname, 'gitexp-out')
-
 const fmt = util.format
 const ffs = util.promisify(fastFolderSize)
 
 const str = (n: Buffer | number): string => n.toString()
 const len = (a: any[] | string): number => a.length
+const uniq = (i: string[]): string[] => [...new Set(i)]
+
+const largestWord = (i: string[]): string => i.reduce((a, b) => (len(a) > len(b) ? a : b))
+
+const isDef = (k: string): boolean => typeof process.env[k] !== 'undefined'
+
+const panic = (m: any): void => {
+  console.error(m)
+  process.exit(1)
+}
+
+/* ... */
+const DEST_DIR = path.join(__dirname, 'gitexp-out')
+const IS_TESTING = isDef('IS_TESTING')
+
+/* adapted from <https://github.com/watson/ci-info> */
+const isCI = (): boolean =>
+  !!(
+    // Travis CI, CircleCI, Cirrus CI, Gitlab CI, Appveyor, CodeShip, dsari
+    (
+      isDef('CI') ||
+      // Travis CI, Cirrus CI
+      isDef('CONTINUOUS_INTEGRATION') ||
+      // Jenkins, TeamCity
+      isDef('BUILD_NUMBER') ||
+      // TaskCluster, dsari
+      isDef('RUN_ID') ||
+      isDef(exports.name) ||
+      false
+    )
+  )
 
 /* ... */
 const fmtBytes = (bytes: number, decimals: number = 2): string => {
@@ -216,6 +248,19 @@ const censor = (o: string, n: string): string => {
 
   return fmt('%s/%s', r(o), r(n))
 }
+
+/* got from <https://github.com/chalk/ansi-regex> */
+const stripColor = (t: string): string =>
+  t.replace(
+    new RegExp(
+      [
+        '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
+        '(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))'
+      ].join('|'),
+      'g'
+    ),
+    ''
+  )
 
 /* -------------------------------------------------------------------------
                                   CLI SPINNERS
@@ -351,15 +396,39 @@ const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
 }
 
 /* ... */
-const categorizeRepositories = (repos: IRepository[]): IReposStat => {
-  const s: IReposStat = { pub: [], priv: [], users: [], orgs: [] }
+const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
+  const rank = (i: string[]): Array<{ name: string, occurrences: number }> => {
+    const r = Object.fromEntries(uniq(i).map((l) => [l, 0]))
+    i.forEach((l) => r[l]++)
 
-  for (const r of repos) {
-    s[r.isPrivate ? 'priv' : 'pub'].push(r.fullName)
-    s[r.owner.isOrg ? 'orgs' : 'users'].push(r.owner.name)
+    return Object.keys(r)
+      .map((name) => ({ name, occurrences: r[name] }))
+      .sort((a, b) => b.occurrences - a.occurrences)
   }
 
-  return _.mapValues(s, _.uniq)
+  const langs: string[] = []
+  const s: IGitHubStats = {
+    repos: { pub: [], priv: [] },
+    langs: [],
+    users: [],
+    orgs: []
+  }
+
+  for (const r of repos) {
+    const p = r.isPrivate ? 'priv' : 'pub'
+    s.repos[p].push(r.fullName)
+
+    const t = r.owner.isOrg ? 'orgs' : 'users'
+    s[t].push(r.owner.name)
+
+    langs.push(r.lang)
+  }
+
+  s.users = uniq(s.users)
+  s.orgs = uniq(s.orgs)
+  s.langs = rank(langs)
+
+  return s
 }
 
 /* ... */
@@ -386,7 +455,7 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
         fullName: repo.full_name,
         url: repo.clone_url,
         isPrivate: repo.private,
-        lang: (repo.language ?? 'null').toLowerCase(),
+        lang: (repo.language ?? 'n/a').toLowerCase(),
         owner: {
           name: _.first(repo.full_name.split('/'))!,
           isOrg: repo.owner?.type.toLowerCase() === 'organization'
@@ -398,8 +467,8 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
   const s = categorizeRepositories(r)
   const m = fmt(
     '(%s; %s; %s; %s)',
-    plural('public', len(s.pub), true),
-    plural('private', len(s.priv), true),
+    plural('public', len(s.repos.pub), true),
+    plural('private', len(s.repos.priv), true),
     plural('organization', len(s.orgs), true),
     plural('user', len(s.users), true)
   )
@@ -423,7 +492,7 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
     return octo
   } catch (e) {
     const errorMessage = chalk.bold.red(e.toString())
-    sp.fail(errorMessage.concat(' -- is your token valid? did you export it?'))
+    sp.fail(errorMessage.concat(' -- is your token valid?'))
 
     throw e
   }
@@ -466,8 +535,78 @@ const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
 })
 
 /* ... */
-const showGithubSummary = (repos: IRepository[]): void => {
-  console.log(repos)
+const showGithubSummary = (stats: IGitHubStats): void => {
+  const { langs } = stats
+
+  const langPositionPadSpace = len(str(len(langs)))
+  const maxColsToDisplay = 4
+
+  const langCols = (() => {
+    /* the length of the largest possible result, e.g. "99. Some Language (100)" */
+    const langOccurencesPadSpace = len(largestWord(langs.map((l) => str(l.occurrences))))
+    const langNamePadSpace = len(largestWord(langs.map((l) => l.name)))
+    const t = langPositionPadSpace + langOccurencesPadSpace + langNamePadSpace + 8
+
+    /* given the length of the largest result, how many columns fits on the terminal? */
+    const m = _.round(process.stdout.columns / t)
+
+    /* we need at least one column */
+    if (m === 0) {
+      return 1
+    }
+
+    /* and at maximum ... */
+    return m > maxColsToDisplay ? maxColsToDisplay : m
+  })()
+
+  /* give the ranked list some pretty colors */
+  const rankedLangsFormatted = langs.map((s, i) =>
+    fmt(
+      '%s %s %s',
+      chalk.gray(_.padStart(`${i + 1}.`, langPositionPadSpace + 1)),
+      s.name,
+      chalk.bold(fmt('(%d)', s.occurrences))
+    )
+  )
+
+  /* divide the lines in chunks of N (columns amount) */
+  const langChunkedByCols = _.chunk(
+    rankedLangsFormatted,
+    _.round(len(rankedLangsFormatted) / langCols)
+  )
+
+  /* the length of the largest line of each column */
+  const columnPad = langChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
+
+  console.log(chalk.cyan('primary languages used by projects, ordered by most occurrences:\n'))
+
+  Array
+    /* creates an empty array just to iterate N times (max number of lines on a given column) */
+    .from(Array(len(_.first(langChunkedByCols) ?? [])))
+
+    /* join items N times (columns amount); transforms this:
+         [
+           ['a', 'b', 'c', 'd'],
+           ['e', 'f', 'g', 'h'],
+           ['i', 'j', 'k', 'l'],
+         ]
+
+       into this:
+         [
+           'a b c d',
+           'e f g h',
+           'i j k l',
+         ] */
+    .map((_, lineNumber) =>
+      langChunkedByCols
+        .map((column, colNumber) =>
+          (column[lineNumber] ?? '').concat(
+            ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
+          )
+        )
+        .join('  ')
+    )
+    .forEach((a) => console.log(a))
 }
 
 /* ... */
@@ -510,20 +649,23 @@ const main = async (): Promise<void> => {
   await displayBanner()
   const startTS = new Date()
 
-  // ---
+  /* --- */
   const showSummary = cliOptions.summary !== undefined
   const runInteractive = cliOptions.interactive !== undefined
 
-  const suppressLoadingSpinners = showSummary
+  const suppressLoadingSpinners = showSummary || isCI()
   const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
 
-  // ---
+  const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
+  const gewt = setInterval(tickTimer, 50, wt)
+
+  /* --- */
   const octo = await authenticate(sb)
-  const { repositories } = await fetchAllRepositories(sb, octo)
+  const { repositories, stats } = await fetchAllRepositories(sb, octo)
 
   if (showSummary) {
-    showGithubSummary(repositories)
-    return
+    showGithubSummary(stats)
+    process.exit(0)
   }
 
   const reposF = filterReposByUserInput(
@@ -531,15 +673,12 @@ const main = async (): Promise<void> => {
     runInteractive ? getRunningOptionsInteractively() : setArgsFallback(cliOptions)
   )
 
-  const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
-  const gewt = setInterval(tickTimer, 50, wt)
-
   const gcs: IGitCloneSpinner = {
     repoClonedCounter: 0,
     repoFailedCounter: 0,
     repoTotal: str(len(reposF)),
     counterPad: len(str(len(reposF))),
-    repoNamePad: len(reposF.map((r) => r.fullName).reduce((a, b) => (len(a) > len(b) ? a : b))),
+    repoNamePad: len(largestWord(reposF.map((r) => r.fullName))),
     spinner: sb('cloning', 'cloning repositories')
   }
 
@@ -562,7 +701,25 @@ const main = async (): Promise<void> => {
   wt.spinner.succeed(fmt('job finished in %s', getElapsedTimeFormatted(startTS)))
 }
 
-main().catch(() => process.exit(1))
+if (!IS_TESTING) {
+  main().catch((e) => panic(e))
+}
+
+export default IS_TESTING
+  ? {
+      str,
+      len,
+      uniq,
+      isDef,
+      isCI,
+      censor,
+      fmtBytes,
+      getElapsedTimeFormatted,
+      filterReposByUserInput,
+      parseCommandLineArgs,
+      categorizeRepositories
+    }
+  : null
 
 /*
 (%%%START | font: rev
