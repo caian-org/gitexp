@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  code-check:
+  build-and-push:
     runs-on: ubuntu-latest
     env:
       IMAGE_NAME: caian/gitexp
