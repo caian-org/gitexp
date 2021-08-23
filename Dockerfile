@@ -15,7 +15,7 @@ FROM package AS dev-deps
 RUN npm i
 
 FROM dev-deps AS build
-COPY src sc
+COPY src src
 COPY tsconfig.json .
 RUN npm run build:js
 
