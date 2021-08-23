@@ -48,15 +48,20 @@ interface ISpinny {
   fail: (t: string) => void
 }
 
+interface IOccurence {
+  name: string
+  count: number
+}
+
 /* ... */
 interface IGitHubStats {
   repos: {
     pub: string[]
     priv: string[]
   }
-  users: string[]
-  orgs: string[]
-  langs: Array<{ name: string, occurrences: number }>
+  users: IOccurence[]
+  orgs: IOccurence[]
+  langs: IOccurence[]
 }
 
 /* ... */
@@ -397,16 +402,19 @@ const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
 
 /* ... */
 const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
-  const rank = (i: string[]): Array<{ name: string, occurrences: number }> => {
+  const rank = (i: string[]): IOccurence[] => {
     const r = Object.fromEntries(uniq(i).map((l) => [l, 0]))
     i.forEach((l) => r[l]++)
 
     return Object.keys(r)
-      .map((name) => ({ name, occurrences: r[name] }))
-      .sort((a, b) => b.occurrences - a.occurrences)
+      .map((name) => ({ name, count: r[name] }))
+      .sort((a, b) => b.count - a.count)
   }
 
   const langs: string[] = []
+  const users: string[] = []
+  const orgs: string[] = []
+
   const s: IGitHubStats = {
     repos: { pub: [], priv: [] },
     langs: [],
@@ -415,17 +423,23 @@ const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
   }
 
   for (const r of repos) {
-    const p = r.isPrivate ? 'priv' : 'pub'
-    s.repos[p].push(r.fullName)
+    if (r.isPrivate) {
+      s.repos.priv.push(r.fullName)
+    } else {
+      s.repos.pub.push(r.fullName)
+    }
 
-    const t = r.owner.isOrg ? 'orgs' : 'users'
-    s[t].push(r.owner.name)
+    if (r.owner.isOrg) {
+      orgs.push(r.owner.name)
+    } else {
+      users.push(r.owner.name)
+    }
 
     langs.push(r.lang)
   }
 
-  s.users = uniq(s.users)
-  s.orgs = uniq(s.orgs)
+  s.users = rank(users)
+  s.orgs = rank(orgs)
   s.langs = rank(langs)
 
   return s
@@ -442,6 +456,7 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
     const { status, data: repos } = await list({ page, visibility: 'all', per_page: 100 })
 
     if (status !== 200) {
+      // @TODO
       throw new Error('fuck')
     }
 
@@ -543,7 +558,7 @@ const showGithubSummary = (stats: IGitHubStats): void => {
 
   const langCols = (() => {
     /* the length of the largest possible result, e.g. "99. Some Language (100)" */
-    const langOccurencesPadSpace = len(largestWord(langs.map((l) => str(l.occurrences))))
+    const langOccurencesPadSpace = len(largestWord(langs.map((l) => str(l.count))))
     const langNamePadSpace = len(largestWord(langs.map((l) => l.name)))
     const t = langPositionPadSpace + langOccurencesPadSpace + langNamePadSpace + 8
 
@@ -565,7 +580,7 @@ const showGithubSummary = (stats: IGitHubStats): void => {
       '%s %s %s',
       chalk.gray(_.padStart(`${i + 1}.`, langPositionPadSpace + 1)),
       s.name,
-      chalk.bold(fmt('(%d)', s.occurrences))
+      chalk.bold(fmt('(%d)', s.count))
     )
   )
 
@@ -607,6 +622,8 @@ const showGithubSummary = (stats: IGitHubStats): void => {
         .join('  ')
     )
     .forEach((a) => console.log(a))
+
+  console.log(chalk.cyan('unique '))
 }
 
 /* ... */
