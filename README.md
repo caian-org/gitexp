@@ -1,5 +1,6 @@
 [![Code check][gh-cc-shield]][gh-cc-url]
 [![Code quality][lgtm-shield]][lgtm-url]
+[![Docker Image Size][docker-img-size-shield]][docker-url]
 [![GitHub tag][tag-shield]][tag-url]
 
 # `gitexp`
@@ -9,6 +10,9 @@
 
 [lgtm-shield]: https://img.shields.io/lgtm/grade/javascript/g/caian-org/github-exporter.svg?logo=lgtm&style=flat-square
 [lgtm-url]: https://lgtm.com/projects/g/caian-org/github-exporter/context:javascript
+
+[docker-img-size-shield]: https://img.shields.io/docker/image-size/caian/gitexp?logo=docker&logoColor=FFF&style=flat-square
+[docker-url]: https://hub.docker.com/r/caian/gitexp
 
 [tag-shield]: https://img.shields.io/github/tag/caian-org/gitexp.svg?logo=git&logoColor=FFF&style=flat-square
 [tag-url]: https://github.com/caian-org/gitexp/releases
