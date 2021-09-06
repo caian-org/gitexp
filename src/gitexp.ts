@@ -151,7 +151,6 @@ const isCI = (): boolean =>
       isDef('BUILD_NUMBER') ||
       // TaskCluster, dsari
       isDef('RUN_ID') ||
-      isDef(exports.name) ||
       false
     )
   )
@@ -454,19 +453,20 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
   const list = octo.rest.repos.listForAuthenticatedUser
 
   for (let page = 1; ; page++) {
-    const { status, data: repos } = await list({ page, visibility: 'all', per_page: 100 })
+    const d = await list({ page, visibility: 'all', per_page: 100 })
 
-    if (status !== 200) {
-      // @TODO
-      throw new Error('fuck')
+    if (d.status !== 200) {
+      throw new Error(
+        fmt('[%s] Unable to fetch; got: \n%s', fetchAllRepositories.name, JSON.stringify(d))
+      )
     }
 
-    if (len(repos) === 0) {
+    if (len(d.data) === 0) {
       break
     }
 
     r.push(
-      ...repos.map((repo) => ({
+      ...d.data.map((repo) => ({
         name: repo.name,
         fullName: repo.full_name,
         url: repo.clone_url,
@@ -528,10 +528,15 @@ const parseCommandLineArgs = (args: string[]): OptionValues => {
   const visibility = new Option('-b, --visibility <level>', 'filter by repository visibility')
   const items = (o: object): string[] => Object.values(o).filter((v) => v !== 'all')
 
-  return new Command()
-    .version('1.0.0', '-v, --version')
+  let cmd = new Command().version('1.0.0', '-v, --version')
+
+  /* interactive prompt must not be available on certain situations */
+  if (!isCI()) {
+    cmd = cmd.option('-i, --interactive', 'set the running options interactively')
+  }
+
+  return cmd
     .option('-s, --summary', 'display a summary of repositories, languages, orgs etc')
-    .option('-i, --interactive', 'set the running options interactively')
     .option('-l, --languages <langs>', 'filter by project language (comma separated)', commaList)
     .option('-f, --only-from <name>', 'filter by owner name (comma separated)', commaList)
     .addOption(owner.choices(items(RepoOwnerType)))
@@ -592,7 +597,7 @@ const showGithubSummary = (stats: IGitHubStats): void => {
   /* the length of the largest line of each column */
   const columnPad = langChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
 
-  console.log(chalk.cyan('primary languages used by projects, ordered by most occurrences:\n'))
+  console.log(chalk.cyan('primary languages used by your projects, ordered by most occurrences:\n'))
 
   Array
     /* creates an empty array just to iterate N times (max number of lines on a given column) */
@@ -663,7 +668,7 @@ const main = async (): Promise<void> => {
   await displayBanner()
   const startTS = new Date()
 
-  /* --- */
+  /* ... */
   const showSummary = cliOptions.summary !== undefined
   const runInteractive = cliOptions.interactive !== undefined
 
@@ -673,7 +678,7 @@ const main = async (): Promise<void> => {
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
   const gewt = setInterval(tickTimer, 50, wt)
 
-  /* --- */
+  /* ... */
   const octo = await authenticate(sb)
   const { repositories, stats } = await fetchAllRepositories(sb, octo)
 
@@ -698,7 +703,7 @@ const main = async (): Promise<void> => {
 
   const repoCloneStatus: CloneStatus[] = []
   for (const chunk of _.chunk(reposF, 10)) {
-    // eslint-disable-next-line
+    /* eslint-disable-next-line */
     const calls = chunk.map((repo) => cloneLocally(gcs, repo))
 
     const res = await Promise.allSettled(calls)
