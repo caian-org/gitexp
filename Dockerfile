@@ -20,6 +20,6 @@ COPY tsconfig.json .
 RUN npm run build:js
 
 FROM base AS run
-COPY --from=prod-deps ["/node_modules", "node_modules"]
-COPY --from=build ["/dist/gitexp.js", "."]
+COPY --from=prod-deps ["/node_modules", "./node_modules"]
+COPY --from=build ["/dist/gitexp.js", "./"]
 ENTRYPOINT ["node", "gitexp.js"]
