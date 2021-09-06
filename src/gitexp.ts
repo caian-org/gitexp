@@ -127,8 +127,11 @@ const largestWord = (i: string[]): string => i.reduce((a, b) => (len(a) > len(b)
 
 const isDef = (k: string): boolean => typeof process.env[k] !== 'undefined'
 
+const errMsg = (e: any): string =>
+  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e)
+
 const panic = (m: any): void => {
-  console.error(m)
+  console.error(errMsg(m))
   process.exit(1)
 }
 
@@ -393,9 +396,7 @@ const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
 
     sp.succeed(fmt('ZIP archive created (%s, %s size reduction)', fmtBytes(archive.size), reduced))
   } catch (e) {
-    const errorMessage = chalk.bold.red(e.toString())
-    sp.fail(errorMessage)
-
+    sp.fail(chalk.bold.red(errMsg(e)))
     throw e
   }
 }
@@ -506,9 +507,7 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
 
     return octo
   } catch (e) {
-    const errorMessage = chalk.bold.red(e.toString())
-    sp.fail(errorMessage.concat(' -- is your token valid?'))
-
+    sp.fail(chalk.bold.red(errMsg(e)).concat(' -- is your token valid?'))
     throw e
   }
 }
@@ -622,8 +621,6 @@ const showGithubSummary = (stats: IGitHubStats): void => {
         .join('  ')
     )
     .forEach((a) => console.log(a))
-
-  console.log(chalk.cyan('unique '))
 }
 
 /* ... */
