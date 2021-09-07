@@ -10,7 +10,12 @@ import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from '@octokit/rest'
 import { Command, Option, OptionValues } from 'commander'
-import { differenceInSeconds, secondsToMinutes, secondsToHours } from 'date-fns'
+import {
+  differenceInSeconds,
+  secondsToMinutes,
+  secondsToHours,
+  format as fmtDatetime
+} from 'date-fns'
 
 /* aesthetic stuff */
 import chalk from 'chalk'
@@ -159,20 +164,19 @@ const DEST_DIR = path.join(__dirname, 'gitexp-out')
 const IS_TESTING = isDef('IS_TESTING')
 
 /* adapted from <https://github.com/watson/ci-info> */
-const isCI = (): boolean =>
-  !!(
-    // Travis CI, CircleCI, Cirrus CI, Gitlab CI, Appveyor, CodeShip, dsari
-    (
-      isDef('CI') ||
-      // Travis CI, Cirrus CI
-      isDef('CONTINUOUS_INTEGRATION') ||
-      // Jenkins, TeamCity
-      isDef('BUILD_NUMBER') ||
-      // TaskCluster, dsari
-      isDef('RUN_ID') ||
-      false
-    )
+const IS_RUNNING_ON_CI_ENV = !!(
+  // Travis CI, CircleCI, Cirrus CI, Gitlab CI, Appveyor, CodeShip, dsari
+  (
+    isDef('CI') ||
+    // Travis CI, Cirrus CI
+    isDef('CONTINUOUS_INTEGRATION') ||
+    // Jenkins, TeamCity
+    isDef('BUILD_NUMBER') ||
+    // TaskCluster, dsari
+    isDef('RUN_ID') ||
+    false
   )
+)
 
 /* ... */
 const fmtBytes = (bytes: number, decimals: number = 2): string => {
@@ -304,8 +308,19 @@ const spinnyBuilder = (spinner: SpinnerType, suppress: boolean = false): SpinnyB
   })
 
   if (suppress) {
-    return (..._: string[]) => {
-      const fn = (_: string): void => {}
+    return (_: string, t: string) => {
+      const fn = (m: string): void =>
+        log(
+          fmt(
+            '%s %s %s %s',
+            chalk.gray('>>>'),
+            chalk.blueBright(fmtDatetime(new Date(), 'yyyy-MM-dd HH:mm:ss'))
+          ),
+          chalk.gray('|'),
+          chalk.bold(m)
+        )
+
+      fn(t)
       return { ref: { text: '' }, succeed: fn, fail: fn }
     }
   }
@@ -574,7 +589,7 @@ const parseCommandLineArgs = (args: string[]): OptionValues => {
   let cmd = new Command().version('1.0.0', '-v, --version')
 
   /* interactive prompt must not be available on certain situations */
-  if (!isCI()) {
+  if (!IS_RUNNING_ON_CI_ENV) {
     cmd = cmd.option('-i, --interactive', 'set the running options interactively')
   }
 
@@ -734,7 +749,8 @@ const main = async (): Promise<void> => {
   const showSummary = cliOptions.summary !== undefined
   const runInteractive = cliOptions.interactive !== undefined
 
-  const suppressLoadingSpinners = showSummary || isCI()
+  const suppressLoadingSpinners =
+    showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
   const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
 
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
@@ -792,7 +808,6 @@ export default IS_TESTING
       len,
       uniq,
       isDef,
-      isCI,
       censor,
       fmtBytes,
       getElapsedTimeFormatted,
