@@ -64,8 +64,17 @@ interface IGitHubStats {
   langs: IOccurence[]
 }
 
+interface IGitHubAuthData {
+  client: Octokit
+  authToken: string
+  authUserData: {
+    login: string
+    name: string
+  }
+}
+
 /* ... */
-interface IUserData {
+interface IUserRepositories {
   repositories: IRepository[]
   stats: IGitHubStats
 }
@@ -357,12 +366,21 @@ const tickTimer = (wt: IWorkingTimer): void => {
    ------------------------------------------------------------------------- */
 
 /* ... */
-const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IRepository> => {
+const cloneLocally = async (
+  g: IGitCloneSpinner,
+  token: string,
+  user: string,
+  r: IRepository
+): Promise<IRepository> => {
   const d = path.join(DEST_DIR, r.owner.name)
 
   try {
     const git = Git()
-    await git.clone(r.url, path.join(d, r.name))
+    const url = r.isPrivate
+      ? fmt('https://%s:%s@github.com/%s/%s', user, token, r.owner.name, r.name)
+      : r.url
+
+    await git.clone(url, path.join(d, r.name))
     updateCloneSpinner(g, r, false)
 
     return r
@@ -458,11 +476,14 @@ const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
 }
 
 /* ... */
-const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<IUserData> => {
+const fetchAllRepositories = async (
+  sb: SpinnyBuilder,
+  client: Octokit
+): Promise<IUserRepositories> => {
   const sp = sb('fetchAllRepositories', 'fetching repositories')
 
   const r: IRepository[] = []
-  const list = octo.rest.repos.listForAuthenticatedUser
+  const list = client.rest.repos.listForAuthenticatedUser
 
   for (let page = 1; ; page++) {
     const d = await list({ page, visibility: 'all', per_page: 100 })
@@ -506,20 +527,29 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, octo: Octokit): Promise<I
 }
 
 /* ... */
-const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
+const authenticate = async (sb: SpinnyBuilder): Promise<IGitHubAuthData> => {
   const sp = sb('authenticate', 'authenticating')
 
   try {
-    const octo = new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN })
-    const { data: authUser } = await octo.rest.users.getAuthenticated()
+    const authToken = process.env.GITHUB_AUTH_TOKEN
+    if (authToken === undefined) {
+      throw new Error('GitHub token is undefined')
+    }
 
-    const login = chalk.cyan(fmt('@%s', authUser.login))
-    const name = authUser.name !== undefined ? fmt('(%s)', chalk.italic(authUser.name)) : ''
+    const client = new Octokit({ auth: process.env.GITHUB_AUTH_TOKEN })
+    const { data } = await client.rest.users.getAuthenticated()
+
+    const login = chalk.cyan(fmt('@%s', data.login))
+    const name = data.name !== undefined ? fmt('(%s)', chalk.italic(data.name)) : ''
     sp.succeed(fmt('authenticated as %s %s', login, name))
 
-    return octo
+    return {
+      authToken,
+      client,
+      authUserData: { name: data.name ?? '', login: data.login }
+    }
   } catch (e) {
-    sp.fail(chalk.bold.red(errMsg(e)).concat(' -- is your token valid?'))
+    sp.fail(chalk.bold.red(errMsg(e)))
 
     throw e
   }
@@ -711,8 +741,8 @@ const main = async (): Promise<void> => {
   const gewt = setInterval(tickTimer, 50, wt)
 
   /* ... */
-  const octo = await authenticate(sb)
-  const { repositories, stats } = await fetchAllRepositories(sb, octo)
+  const { client, authToken, authUserData } = await authenticate(sb)
+  const { repositories, stats } = await fetchAllRepositories(sb, client)
 
   if (showSummary) {
     showGithubSummary(stats)
@@ -736,7 +766,7 @@ const main = async (): Promise<void> => {
   const repoCloneStatus: CloneStatus[] = []
   for (const chunk of _.chunk(reposF, 10)) {
     /* eslint-disable-next-line */
-    const calls = chunk.map((repo) => cloneLocally(gcs, repo))
+    const calls = chunk.map((repo) => cloneLocally(gcs, authToken, authUserData.login, repo))
 
     const res = await Promise.allSettled(calls)
     res.forEach((i) => repoCloneStatus.push(i))
