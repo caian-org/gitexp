@@ -567,8 +567,9 @@ const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
 })
 
 /* ... */
-const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): string[] => {
+const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): string => {
   const { maxColsToDisplay = 4, hideRank = false, hideOccurences = false } = opts
+
   const occurPositionPadSpace = len(str(len(occ)))
 
   const colsToDisplay = (() => {
@@ -578,7 +579,7 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
     const t = occurPositionPadSpace + occurOccurencesPadSpace + occurNamePadSpace + 8
 
     /* given the length of the largest result, how many columns fits on the terminal? */
-    const m = Math.ceil((process.stdout.columns - 8) / t)
+    const m = Math.ceil((process.stdout.columns - 10) / t)
 
     /* we need at least one column */
     if (m <= 0) {
@@ -598,7 +599,7 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
         hideRank ? '' : chalk.gray(_.padStart(`${i + 1}.`, occurPositionPadSpace + 1)),
         s.name,
         hideOccurences ? '' : chalk.bold(fmt('(%d)', s.count))
-      ).trimEnd()
+      )
     ),
     Math.ceil(len(occ) / colsToDisplay)
   )
@@ -633,27 +634,29 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
           )
           .join('  ')
       )
+      .map((t) => ' '.repeat(2).concat(t))
+      .join('\n')
+      .concat('\n\n')
   )
 }
 
 /* ... */
 const showGithubSummary = (stats: IGitHubStats): void => {
   const h = (t: string): void => log(chalk.cyan(t))
-  const p = (i: string[]): void => log(i.join('\n').concat('\n\n'))
 
   if (len(stats.langs) > 0) {
     h('primary languages used by your projects, ordered by occurences:\n')
-    p(tabulateOccurrences(stats.langs))
+    log(tabulateOccurrences(stats.langs))
   }
 
   if (len(stats.users) > 0) {
     h('users, ordered by the amount of owned projects:\n')
-    p(tabulateOccurrences(stats.users))
+    log(tabulateOccurrences(stats.users))
   }
 
   if (len(stats.orgs) > 0) {
     h('organizations, ordered by the amount of owned projects:\n')
-    p(tabulateOccurrences(stats.orgs))
+    log(tabulateOccurrences(stats.orgs))
   }
 }
 
