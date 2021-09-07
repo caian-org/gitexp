@@ -22,4 +22,5 @@ RUN npm run build:js
 FROM base AS run
 COPY --from=prod-deps ["/node_modules", "./node_modules"]
 COPY --from=build ["/dist/gitexp.js", "./"]
+ENV IS_RUNNING_ON_DOCKER=1
 ENTRYPOINT ["node", "gitexp.js"]
