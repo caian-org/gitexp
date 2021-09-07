@@ -94,12 +94,21 @@ interface ICloneFilters {
   languages: string[] | null
 }
 
+/* ... */
+interface ITabulateOptions {
+  maxColsToDisplay?: number
+  hideRank?: boolean
+  hideOccurences?: boolean
+}
+
+/* ... */
 enum RepoVisibility {
   ALL = 'all',
   PUBLIC = 'public',
   PRIVATE = 'private'
 }
 
+/* ... */
 enum RepoOwnerType {
   ALL = 'all',
   USER = 'user',
@@ -118,6 +127,7 @@ type SpinnyBuilder = (n: string, t: string) => ISpinny
 /* ... */
 const fmt = util.format
 const ffs = util.promisify(fastFolderSize)
+const { log } = console
 
 const str = (n: Buffer | number): string => n.toString()
 const len = (a: any[] | string): number => a.length
@@ -244,7 +254,7 @@ const displayBanner = async (): Promise<void> => {
   const figlets = await getFiglets()
   const banner = len(figlets) > 0 ? _.sample(figlets) : ''
 
-  console.log(fmt('\n%s\n', chalk.gray(banner)))
+  log(fmt('\n%s\n', chalk.gray(banner)))
 }
 
 /* ... */
@@ -357,8 +367,9 @@ const cloneLocally = async (g: IGitCloneSpinner, r: IRepository): Promise<IRepos
 
     return r
   } catch (e) {
-    console.log(e)
+    log(e)
     updateCloneSpinner(g, r, true)
+
     throw e
   }
 }
@@ -396,6 +407,7 @@ const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
     sp.succeed(fmt('ZIP archive created (%s, %s size reduction)', fmtBytes(archive.size), reduced))
   } catch (e) {
     sp.fail(chalk.bold.red(errMsg(e)))
+
     throw e
   }
 }
@@ -508,6 +520,7 @@ const authenticate = async (sb: SpinnyBuilder): Promise<Octokit> => {
     return octo
   } catch (e) {
     sp.fail(chalk.bold.red(errMsg(e)).concat(' -- is your token valid?'))
+
     throw e
   }
 }
@@ -554,23 +567,21 @@ const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
 })
 
 /* ... */
-const showGithubSummary = (stats: IGitHubStats): void => {
-  const { langs } = stats
+const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): string[] => {
+  const { maxColsToDisplay = 4, hideRank = false, hideOccurences = false } = opts
+  const occurPositionPadSpace = len(str(len(occ)))
 
-  const langPositionPadSpace = len(str(len(langs)))
-  const maxColsToDisplay = 4
-
-  const langCols = (() => {
-    /* the length of the largest possible result, e.g. "99. Some Language (100)" */
-    const langOccurencesPadSpace = len(largestWord(langs.map((l) => str(l.count))))
-    const langNamePadSpace = len(largestWord(langs.map((l) => l.name)))
-    const t = langPositionPadSpace + langOccurencesPadSpace + langNamePadSpace + 8
+  const colsToDisplay = (() => {
+    /* the length of the largest possible result, e.g. "99. Some occuruage (100)" */
+    const occurOccurencesPadSpace = len(largestWord(occ.map((l) => str(l.count))))
+    const occurNamePadSpace = len(largestWord(occ.map((l) => l.name)))
+    const t = occurPositionPadSpace + occurOccurencesPadSpace + occurNamePadSpace + 8
 
     /* given the length of the largest result, how many columns fits on the terminal? */
-    const m = _.round(process.stdout.columns / t)
+    const m = Math.ceil((process.stdout.columns - 8) / t)
 
     /* we need at least one column */
-    if (m === 0) {
+    if (m <= 0) {
       return 1
     }
 
@@ -578,32 +589,29 @@ const showGithubSummary = (stats: IGitHubStats): void => {
     return m > maxColsToDisplay ? maxColsToDisplay : m
   })()
 
-  /* give the ranked list some pretty colors */
-  const rankedLangsFormatted = langs.map((s, i) =>
-    fmt(
-      '%s %s %s',
-      chalk.gray(_.padStart(`${i + 1}.`, langPositionPadSpace + 1)),
-      s.name,
-      chalk.bold(fmt('(%d)', s.count))
-    )
-  )
-
   /* divide the lines in chunks of N (columns amount) */
-  const langChunkedByCols = _.chunk(
-    rankedLangsFormatted,
-    _.round(len(rankedLangsFormatted) / langCols)
+  const occurChunkedByCols = _.chunk(
+    /* give the ranked list some pretty colors */
+    occ.map((s, i) =>
+      fmt(
+        '%s %s %s',
+        hideRank ? '' : chalk.gray(_.padStart(`${i + 1}.`, occurPositionPadSpace + 1)),
+        s.name,
+        hideOccurences ? '' : chalk.bold(fmt('(%d)', s.count))
+      ).trimEnd()
+    ),
+    Math.ceil(len(occ) / colsToDisplay)
   )
 
   /* the length of the largest line of each column */
-  const columnPad = langChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
+  const columnPad = occurChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
 
-  console.log(chalk.cyan('primary languages used by your projects, ordered by most occurrences:\n'))
+  return (
+    Array
+      /* creates an empty array just to iterate N times (max number of lines on a given column) */
+      .from(Array(len(_.first(occurChunkedByCols) ?? [])))
 
-  Array
-    /* creates an empty array just to iterate N times (max number of lines on a given column) */
-    .from(Array(len(_.first(langChunkedByCols) ?? [])))
-
-    /* join items N times (columns amount); transforms this:
+      /* join items N times (columns amount); transforms this:
          [
            ['a', 'b', 'c', 'd'],
            ['e', 'f', 'g', 'h'],
@@ -616,16 +624,37 @@ const showGithubSummary = (stats: IGitHubStats): void => {
            'e f g h',
            'i j k l',
          ] */
-    .map((_, lineNumber) =>
-      langChunkedByCols
-        .map((column, colNumber) =>
-          (column[lineNumber] ?? '').concat(
-            ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
+      .map((_, lineNumber) =>
+        occurChunkedByCols
+          .map((column, colNumber) =>
+            (column[lineNumber] ?? '').concat(
+              ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
+            )
           )
-        )
-        .join('  ')
-    )
-    .forEach((a) => console.log(a))
+          .join('  ')
+      )
+  )
+}
+
+/* ... */
+const showGithubSummary = (stats: IGitHubStats): void => {
+  const h = (t: string): void => log(chalk.cyan(t))
+  const p = (i: string[]): void => log(i.join('\n').concat('\n\n'))
+
+  if (len(stats.langs) > 0) {
+    h('primary languages used by your projects, ordered by occurences:\n')
+    p(tabulateOccurrences(stats.langs))
+  }
+
+  if (len(stats.users) > 0) {
+    h('users, ordered by the amount of owned projects:\n')
+    p(tabulateOccurrences(stats.users))
+  }
+
+  if (len(stats.orgs) > 0) {
+    h('organizations, ordered by the amount of owned projects:\n')
+    p(tabulateOccurrences(stats.orgs))
+  }
 }
 
 /* ... */
