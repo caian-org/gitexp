@@ -3,7 +3,11 @@
 [![Docker Image Size][docker-img-size-shield]][docker-url]
 [![GitHub tag][tag-shield]][tag-url]
 
-# `gitexp`
+# gitexp
+
+<img src="icon.svg" height="240px" align="right"/>
+
+`gitexp` (<b>git</b>hub <b>exp</b>ort) is a tool to mass export/clone repos from GitHub.
 
 [gh-cc-shield]: https://img.shields.io/github/workflow/status/caian-org/gitexp/code-check?label=code%20check&logo=github&style=flat-square
 [gh-cc-url]: https://github.com/caian-org/gitexp/actions/workflows/code-check.yml
