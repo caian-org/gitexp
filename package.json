@@ -143,7 +143,7 @@
     "cli-spinners": "^2.6.1",
     "commander": "^8.3.0",
     "date-fns": "^2.25.0",
-    "fast-folder-size": "^1.5.0",
+    "fast-folder-size": "^1.6.1",
     "inquirer": "^8.2.0",
     "lodash": "^4.17.21",
     "pluralize": "^8.0.0",
