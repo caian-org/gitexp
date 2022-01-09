@@ -10,6 +10,7 @@ import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from '@octokit/rest'
 import { Command, Option, OptionValues } from 'commander'
+
 import {
   differenceInSeconds,
   secondsToMinutes,
@@ -151,6 +152,11 @@ const largestWord = (i: string[]): string => i.reduce((a, b) => (len(a) > len(b)
 
 const isDef = (k: string): boolean => typeof process.env[k] !== 'undefined'
 
+const indent =
+  (level: number = 2) =>
+    (a: string): string =>
+      ' '.repeat(level).concat(a)
+
 const errMsg = (e: any): string =>
   e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e)
 
@@ -267,7 +273,7 @@ const displayBanner = async (): Promise<void> => {
   const figlets = await getFiglets()
   const banner = len(figlets) > 0 ? _.sample(figlets) : ''
 
-  log(fmt('\n%s\n', chalk.gray(banner)))
+  log(chalk.gray(banner))
 }
 
 /* ... */
@@ -618,13 +624,15 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
   const occurPositionPadSpace = len(str(len(occ)))
 
   const colsToDisplay = (() => {
-    /* the length of the largest possible result, e.g. "99. Some occuruage (100)" */
-    const occurOccurencesPadSpace = len(largestWord(occ.map((l) => str(l.count))))
-    const occurNamePadSpace = len(largestWord(occ.map((l) => l.name)))
-    const t = occurPositionPadSpace + occurOccurencesPadSpace + occurNamePadSpace + 8
+    /* the length of the largest possible result, e.g. "99. Some occurrence (100)" */
+    const t =
+      occurPositionPadSpace +
+      len(largestWord(occ.map((w) => str(w.count)))) +
+      len(largestWord(occ.map((w) => w.name))) +
+      (maxColsToDisplay - 1) * 6
 
     /* given the length of the largest result, how many columns fits on the terminal? */
-    const m = Math.ceil((process.stdout.columns - 10) / t)
+    const m = Math.ceil(process.stdout.columns / t)
 
     /* we need at least one column */
     if (m <= 0) {
@@ -641,7 +649,7 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
     occ.map((s, i) =>
       fmt(
         '%s %s %s',
-        hideRank ? '' : chalk.gray(_.padStart(`${i + 1}.`, occurPositionPadSpace + 1)),
+        hideRank ? '' : _.padStart(chalk.gray(`${i + 1}.`), occurPositionPadSpace + 1),
         s.name,
         hideOccurences ? '' : chalk.bold(fmt('(%d)', s.count))
       )
@@ -652,37 +660,39 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
   /* the length of the largest line of each column */
   const columnPad = occurChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
 
-  return (
-    Array
-      /* creates an empty array just to iterate N times (max number of lines on a given column) */
-      .from(Array(len(_.first(occurChunkedByCols) ?? [])))
+  const entries = Array
+    /* creates an empty array just to iterate N times (max number of lines on a given column) */
+    .from(Array(len(_.first(occurChunkedByCols) ?? [])))
 
-      /* join items N times (columns amount); transforms this:
-         [
-           ['a', 'b', 'c', 'd'],
-           ['e', 'f', 'g', 'h'],
-           ['i', 'j', 'k', 'l'],
-         ]
+    /* join items N times (columns amount); transforms this:
+       [
+         ['a', 'b', 'c', 'd'],
+         ['e', 'f', 'g', 'h'],
+         ['i', 'j', 'k', 'l'],
+       ]
 
-       into this:
-         [
-           'a b c d',
-           'e f g h',
-           'i j k l',
-         ] */
-      .map((_, lineNumber) =>
-        occurChunkedByCols
-          .map((column, colNumber) =>
-            (column[lineNumber] ?? '').concat(
-              ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
-            )
+     into this:
+       [
+         'a b c d',
+         'e f g h',
+         'i j k l',
+       ] */
+    .map((_, lineNumber) =>
+      occurChunkedByCols
+        .map((column, colNumber) =>
+          (column[lineNumber] ?? '').concat(
+            ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
           )
-          .join('  ')
-      )
-      .map((t) => ' '.repeat(2).concat(t))
-      .join('\n')
-      .concat('\n\n')
-  )
+        )
+        .join('  ')
+    )
+    .map(indent())
+
+  return (
+    entries.every((t) => t.startsWith(' ', 3))
+      ? entries.map((t) => t.trim()).map(indent())
+      : entries
+  ).join('\n')
 }
 
 /* ... */
@@ -690,17 +700,17 @@ const showGithubSummary = (stats: IGitHubStats): void => {
   const h = (t: string): void => log(chalk.cyan(t))
 
   if (len(stats.langs) > 0) {
-    h('primary languages used by your projects, ordered by occurences:\n')
+    h('\nprimary languages used by your projects, ordered by occurences:\n')
     log(tabulateOccurrences(stats.langs))
   }
 
   if (len(stats.users) > 0) {
-    h('users, ordered by the amount of owned projects:\n')
+    h('\nusers, ordered by the amount of owned projects:\n')
     log(tabulateOccurrences(stats.users))
   }
 
   if (len(stats.orgs) > 0) {
-    h('organizations, ordered by the amount of owned projects:\n')
+    h('\norganizations, ordered by the amount of owned projects:\n')
     log(tabulateOccurrences(stats.orgs))
   }
 }
@@ -751,6 +761,7 @@ const main = async (): Promise<void> => {
 
   const suppressLoadingSpinners =
     showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
+
   const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
 
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
@@ -804,12 +815,14 @@ if (!IS_TESTING) {
 
 export default IS_TESTING
   ? {
+      // done
       str,
       len,
       uniq,
-      isDef,
       censor,
+      // to be tested
       fmtBytes,
+      isDef,
       getElapsedTimeFormatted,
       filterReposByUserInput,
       parseCommandLineArgs,
