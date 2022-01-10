@@ -26,9 +26,8 @@
     "check:style": "standardx src/gitexp.ts",
     "check:duplicated": "jscpd",
     "check:all": "npm run check:lint && npm run check:style && npm run check:duplicated",
-    "fix:style": "npm run prettify src/gitexp.ts && standardx --fix src/gitexp.ts",
-    "test": "jest --verbose --collect-coverage",
-    "prettify": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write",
+    "fix:style": "prettier --no-semi --print-width 100 --single-quote --trailing-comma none --write '**/*.ts' && standardx --fix '**/*.ts'",
+    "test": "IS_TESTING=1 jest",
     "clean": "rm -rf dist report",
     "commit": "cz",
     "prepare": "[ \"$NODE_ENV\" = \"production\" ] && exit 0; husky install"
@@ -70,10 +69,10 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "collectCoverage": true,
     "collectCoverageFrom": [
       "**/src/**/*.{js,jsx,ts,tsx}",
-      "!dist/**/*.js",
-      "!src/index.ts"
+      "!dist/**/*.js"
     ],
     "moduleFileExtensions": [
       "js",
@@ -96,7 +95,9 @@
     ],
     "coverageThreshold": {
       "global": {
-        "lines": 80
+        "lines": 75,
+        "functions": 75,
+        "branches": 75
       }
     },
     "moduleNameMapper": {
