@@ -186,6 +186,10 @@ const IS_RUNNING_ON_CI_ENV = !!(
 
 /* ... */
 const fmtBytes = (bytes: number, decimals: number = 2): string => {
+  if (bytes < 0) {
+    throw new Error(`Bytes must be above 0; got "${bytes}"`)
+  }
+
   if (bytes === 0) {
     return '0 Bytes'
   }
@@ -820,8 +824,8 @@ export default IS_TESTING
       len,
       uniq,
       censor,
-      // to be tested
       fmtBytes,
+      // to be tested
       isDef,
       getElapsedTimeFormatted,
       filterReposByUserInput,
