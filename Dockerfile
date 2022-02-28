@@ -1,26 +1,43 @@
 FROM node:16-alpine AS base
-RUN apk add --no-cache git
+LABEL maintainer="Caian Ertl <hi@caian.org>"
 
+RUN addgroup -S turing && adduser -S turing -G turing \
+    && mkdir -p /home/turing \
+    && chown turing:turing /home/turing
+USER turing
+
+# ...
 FROM base AS package
+WORKDIR /home/turing
 COPY package.json .
-COPY package-lock.json .
+COPY pnpm-lock.yaml .
 
-FROM package AS prod-deps
-RUN apk add --no-cache curl
-RUN curl -sf https://gobinaries.com/tj/node-prune | sh
-RUN NODE_ENV="production" npm i --only=production
+# ...
+FROM package as bin
+USER root
+RUN npm i -g pnpm@latest \
+    && apk add --no-cache curl \
+    && curl -sf https://gobinaries.com/tj/node-prune | sh
+USER turing
+
+# ...
+FROM bin AS dev-deps
+RUN pnpm i
+
+# ...
+FROM bin AS prod-deps
+RUN NODE_ENV="production" pnpm i
 RUN node-prune
 
-FROM package AS dev-deps
-RUN npm i
-
+# ...
 FROM dev-deps AS build
 COPY src src
 COPY tsconfig.json .
-RUN npm run build:js
+RUN pnpm run build:js
 
+# ...
 FROM base AS run
-COPY --from=prod-deps ["/node_modules", "./node_modules"]
-COPY --from=build ["/dist/gitexp.js", "./"]
+COPY --from=prod-deps ["/home/turing/node_modules", "node_modules"]
+COPY --from=build ["/home/turing/dist/gitexp.js", "./"]
 ENV IS_RUNNING_ON_DOCKER=1
 ENTRYPOINT ["node", "gitexp.js"]
