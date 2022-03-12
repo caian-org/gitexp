@@ -148,7 +148,7 @@
     "inquirer": "^8.2.0",
     "lodash": "^4.17.21",
     "pluralize": "^8.0.0",
-    "simple-git": "^2.48.0",
+    "simple-git": "^3.3.0",
     "spinnies-ts": "github:caian-org/spinnies-ts#v0.6.0"
   }
 }
