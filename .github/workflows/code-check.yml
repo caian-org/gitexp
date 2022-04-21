@@ -50,5 +50,17 @@ jobs:
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: pnpm i
 
-      - name: Perform all checkings
-        run: pnpm run check:all
+      - name: Check TS build
+        run: pnpm run build:js
+
+      - name: Check linter rules
+        run: pnpm run check:lint
+
+      - name: Check code style
+        run: pnpm run check:style
+
+      - name: Check for duplicated code
+        run: pnpm run check:duplicated
+
+      - name: Run tests
+        run: pnpm test
