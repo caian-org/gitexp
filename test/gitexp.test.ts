@@ -30,14 +30,12 @@ describe('GITEXP:', () => {
     const b = ['a', 'b', 'A', 'c', 'B', 'd', 'a']
 
     it('Should get the unique items of a string array', () => expect(g.uniq(a).length).toBe(4))
-    it('Should differentiate upper and lower case characters', () =>
-      expect(g.uniq(b).length).toBe(6))
+    it('Should differentiate upper and lower case characters', () => expect(g.uniq(b).length).toBe(6))
   })
 
   /* ... */
   describe('Function "censor" (hide part of a git user@repo)', () => {
-    it('Should censor all but the first 3 chars', () =>
-      expect(g.censor('my_user', 'my_repo')).toBe('my_****/my_****'))
+    it('Should censor all but the first 3 chars', () => expect(g.censor('my_user', 'my_repo')).toBe('my_****/my_****'))
 
     it('Should censor all when the user or repo have less than 4 chars', () =>
       expect(g.censor('hey', 'you')).toBe('***/***'))
@@ -61,18 +59,15 @@ describe('GITEXP:', () => {
 
     it('Should format MB', () => expect(g.fmtBytes(_1mb)).toBe('1 MB'))
     it('Should format MB with decimal places', () => expect(f(_1mb + 150 * _1kb)).toBe('1.15 MB'))
-    it('Should format MB with custom decimal places', () =>
-      expect(f(_1mb + 234 * _1kb, 3)).toBe('1.229 MB'))
+    it('Should format MB with custom decimal places', () => expect(f(_1mb + 234 * _1kb, 3)).toBe('1.229 MB'))
 
     it('Should format GB', () => expect(g.fmtBytes(_1gb)).toBe('1 GB'))
     it('Should format GB with decimal places', () => expect(f(_1gb + 870 * _1mb)).toBe('1.85 GB'))
-    it('Should format GB with custom decimal places', () =>
-      expect(f(_1gb + 234 * _1kb, 4)).toBe('1.0002 GB'))
+    it('Should format GB with custom decimal places', () => expect(f(_1gb + 234 * _1kb, 4)).toBe('1.0002 GB'))
 
     it('Should format TB', () => expect(g.fmtBytes(_1tb)).toBe('1 TB'))
     it('Should format TB with decimal places', () => expect(f(_1tb + 512 * _1gb)).toBe('1.5 TB'))
-    it('Should format TB with custom decimal places', () =>
-      expect(f(_1tb + 700 * _1gb, 4)).toBe('1.6836 TB'))
+    it('Should format TB with custom decimal places', () => expect(f(_1tb + 700 * _1gb, 4)).toBe('1.6836 TB'))
 
     it('Should throw when the bytes are below 0 (zero)', () => {
       try {
