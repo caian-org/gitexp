@@ -93,13 +93,6 @@
       "/dist/",
       "/node_modules/"
     ],
-    "coverageThreshold": {
-      "global": {
-        "lines": 75,
-        "functions": 75,
-        "branches": 75
-      }
-    },
     "moduleNameMapper": {
       "^@gitexp/(.*)$": "<rootDir>/src/$1"
     }
