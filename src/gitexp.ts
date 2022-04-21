@@ -10,19 +10,13 @@ import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from '@octokit/rest'
 import { Command, Option, OptionValues } from 'commander'
-
-import {
-  differenceInSeconds,
-  secondsToMinutes,
-  secondsToHours,
-  format as fmtDatetime
-} from 'date-fns'
+import { differenceInSeconds, secondsToMinutes, secondsToHours, format as fmtDatetime } from 'date-fns'
 
 /* aesthetic stuff */
 import chalk from 'chalk'
 import clear from 'clear'
 import plural from 'pluralize'
-import Spinnies from 'spinnies-ts'
+import Spinnies from 'spinnies'
 import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
 
 /* -------------------------------------------------------------------------
@@ -133,6 +127,7 @@ enum RepoOwnerType {
 /* ... */
 type CloneStatus = PromiseSettledResult<IRepository>
 type Spinny = Spinnies.SpinnerOptions
+type SpinnyOptions = Spinnies.Options
 type SpinnyBuilder = (n: string, t: string) => ISpinny
 
 /* -------------------------------------------------------------------------
@@ -152,18 +147,17 @@ const largestWord = (i: string[]): string => i.reduce((a, b) => (len(a) > len(b)
 
 const isDef = (k: string): boolean => typeof process.env[k] !== 'undefined'
 
-const indent =
-  (level: number = 2) =>
-    (a: string): string =>
-      ' '.repeat(level).concat(a)
-
-const errMsg = (e: any): string =>
-  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e)
+const errMsg = (e: any): string => (e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e))
 
 const panic = (m: any): void => {
   console.error(errMsg(m))
   process.exit(1)
 }
+
+const indent =
+  (level: number = 2) =>
+    (a: string): string =>
+      ' '.repeat(level).concat(a)
 
 /* ... */
 const DEST_DIR = path.join(__dirname, 'gitexp-out')
@@ -308,40 +302,36 @@ const stripColor = (t: string): string =>
 
 /* ... */
 const spinnyBuilder = (spinner: SpinnerType, suppress: boolean = false): SpinnyBuilder => {
-  const spinnies = new Spinnies({
-    spinner,
-    succeedPrefix: '✔',
-    succeedColor: 'white',
-    failColor: 'white',
-    color: 'white',
-    spinnerColor: 'blueBright'
-  })
+  const c = { spinnerColor: 'blueBright', succeedColor: 'white', failColor: 'white' }
 
-  if (suppress) {
-    return (_: string, t: string) => {
-      const fn = (m: string): void =>
-        log(
-          fmt(
-            '%s %s %s %s',
-            chalk.gray('>>>'),
-            chalk.blueBright(fmtDatetime(new Date(), 'yyyy-MM-dd HH:mm:ss'))
-          ),
-          chalk.gray('|'),
-          chalk.bold(m)
-        )
+  if (!suppress) {
+    const spinnies = new Spinnies(
+      _.merge(c, { spinner, succeedPrefix: '✔', color: 'white' }) as unknown as SpinnyOptions
+    )
 
-      fn(t)
-      return { ref: { text: '' }, succeed: fn, fail: fn }
+    return (name, text) => {
+      const ref = spinnies.add(name, { text })
+
+      return {
+        ref,
+        succeed: (t: string) => spinnies.succeed(name, { text: t }),
+        fail: (t: string) => spinnies.fail(name, { text: t })
+      }
     }
   }
 
-  return (name, text) => {
-    const ref = spinnies.add(name, { text })
-    return {
-      ref,
-      succeed: (t: string) => spinnies.succeed(name, { text: t }),
-      fail: (t: string) => spinnies.fail(name, { text: t })
-    }
+  return (__: string, t: string) => {
+    const ref = _.merge(c, { text: '', indent: 0, status: 'stopped' }) as unknown as Spinny
+
+    const fn = (m: string): void =>
+      log(
+        fmt('%s %s %s %s', chalk.gray('>>>'), chalk.blueBright(fmtDatetime(new Date(), 'yyyy-MM-dd HH:mm:ss'))),
+        chalk.gray('|'),
+        chalk.bold(m)
+      )
+
+    fn(t)
+    return { ref, succeed: fn, fail: fn }
   }
 }
 
@@ -362,11 +352,7 @@ const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: bool
 }
 
 /* ... */
-const concludeCloneSpinner = async (
-  g: IGitCloneSpinner,
-  s: CloneStatus[],
-  e: CloneStatus[]
-): Promise<void> => {
+const concludeCloneSpinner = async (g: IGitCloneSpinner, s: CloneStatus[], e: CloneStatus[]): Promise<void> => {
   const destDirSize = (await ffs(DEST_DIR)) ?? 0
   const labelDownloaded = fmt('%s downloaded locally', fmtBytes(destDirSize))
 
@@ -391,19 +377,12 @@ const tickTimer = (wt: IWorkingTimer): void => {
    ------------------------------------------------------------------------- */
 
 /* ... */
-const cloneLocally = async (
-  g: IGitCloneSpinner,
-  token: string,
-  user: string,
-  r: IRepository
-): Promise<IRepository> => {
+const cloneLocally = async (g: IGitCloneSpinner, token: string, user: string, r: IRepository): Promise<IRepository> => {
   const d = path.join(DEST_DIR, r.owner.name)
 
   try {
     const git = Git()
-    const url = r.isPrivate
-      ? fmt('https://%s:%s@github.com/%s/%s', user, token, r.owner.name, r.name)
-      : r.url
+    const url = r.isPrivate ? fmt('https://%s:%s@github.com/%s/%s', user, token, r.owner.name, r.name) : r.url
 
     await git.clone(url, path.join(d, r.name))
     updateCloneSpinner(g, r, false)
@@ -501,10 +480,7 @@ const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
 }
 
 /* ... */
-const fetchAllRepositories = async (
-  sb: SpinnyBuilder,
-  client: Octokit
-): Promise<IUserRepositories> => {
+const fetchAllRepositories = async (sb: SpinnyBuilder, client: Octokit): Promise<IUserRepositories> => {
   const sp = sb('fetchAllRepositories', 'fetching repositories')
 
   const r: IRepository[] = []
@@ -514,9 +490,7 @@ const fetchAllRepositories = async (
     const d = await list({ page, visibility: 'all', per_page: 100 })
 
     if (d.status !== 200) {
-      throw new Error(
-        fmt('[%s] Unable to fetch; got: \n%s', fetchAllRepositories.name, JSON.stringify(d))
-      )
+      throw new Error(fmt('[%s] Unable to fetch; got: \n%s', fetchAllRepositories.name, JSON.stringify(d)))
     }
 
     if (len(d.data) === 0) {
@@ -692,11 +666,7 @@ const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): st
     )
     .map(indent())
 
-  return (
-    entries.every((t) => t.startsWith(' ', 3))
-      ? entries.map((t) => t.trim()).map(indent())
-      : entries
-  ).join('\n')
+  return (entries.every((t) => t.startsWith(' ', 3)) ? entries.map((t) => t.trim()).map(indent()) : entries).join('\n')
 }
 
 /* ... */
@@ -763,8 +733,7 @@ const main = async (): Promise<void> => {
   const showSummary = cliOptions.summary !== undefined
   const runInteractive = cliOptions.interactive !== undefined
 
-  const suppressLoadingSpinners =
-    showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
+  const suppressLoadingSpinners = showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
 
   const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
 
