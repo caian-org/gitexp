@@ -1,21 +1,24 @@
 {
   "compilerOptions": {
     "lib": ["ES2019", "ES2020", "ES2021"],
-    "target": "ES2018",
+    "target": "ES2015",
     "module": "commonjs",
     "outDir": "./dist",
-    "baseUrl": "./src",
+    "rootDir": "./src",
+    "declaration": true,
     "strict": true,
-    "alwaysStrict": true,
+    "removeComments": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedParameters": false,
+    "experimentalDecorators": true,
     "esModuleInterop": true,
-    "pretty": true,
-    "diagnostics": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
     "incremental": true
   },
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "jest.config.ts"
   ]
 }

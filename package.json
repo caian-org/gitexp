@@ -3,8 +3,6 @@
   "version": "0.5.0",
   "description": "",
   "main": "dist/gitexp.js",
-  "author": "Caian Ertl <hi@caian.org>",
-  "license": "CC0-1.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/caian-org/gitexp.git"
@@ -14,136 +12,70 @@
   },
   "homepage": "https://github.com/caian-org/gitexp#readme",
   "scripts": {
-    "all": "pnpm run build:js && pnpm run fix:style && pnpm run check:all && pnpm run clean",
     "start": "node dist/gitexp.js",
     "start:ts": "ts-node src/gitexp.ts",
-    "build:js": "tsc",
-    "build:js:clean": "rm -rf dist && pnpm run build:js",
+    "build": "tsc",
+    "build:clean": "rm -rf dist tsconfig.tsbuildinfo && npm run build",
     "bump:dev": "ncu --upgrade --dep dev --target minor",
     "bump:prod": "ncu --upgrade --dep prod --target minor",
-    "bump:all": "pnpm run bump:dev && pnpm run bump:prod",
-    "check:lint": "eslint --format=codeframe src/gitexp.ts",
-    "check:style": "standardx src/gitexp.ts",
+    "check:all": "npm run check:style && npm run check:types && npm run check:duplicated",
     "check:duplicated": "jscpd",
-    "check:all": "pnpm run check:lint && pnpm run check:style && pnpm run check:duplicated",
-    "fix:style": "prettier --no-semi --print-width 120 --single-quote --trailing-comma none --write '**/*.ts' && standardx --fix '**/*.ts'",
-    "test": "IS_TESTING=1 jest",
-    "clean": "rm -rf dist report",
-    "commit": "cz",
-    "prepare": "[ \"$NODE_ENV\" = \"production\" ] && exit 0; husky install"
+    "check:style": "ts-standard src",
+    "check:types": "tsc --noEmit",
+    "fix:style": "prettier --config .prettierrc.js '**/*.ts' --write && ts-standard --fix src",
+    "prepublish": "npm run build:clean",
+    "test": "jest"
   },
+  "author": "Caian Ertl <hi@caian.org>",
+  "license": "CC0-1.0",
   "config": {
     "commitizen": {
-      "path": "./node_modules/cz-conventional-changelog"
+      "path": "cz-conventional-changelog"
     }
   },
-  "standardx": {
-    "parser": "@typescript-eslint/parser",
-    "plugins": [
-      "@typescript-eslint/eslint-plugin"
-    ]
-  },
-  "eslintIgnore": [
-    "dist",
-    "report"
-  ],
   "lint-staged": {
     "**/*.ts": [
-      "pnpm run fix:style"
+      "npm run fix:style"
     ]
-  },
-  "jscpd": {
-    "threshold": 5,
-    "reporters": [
-      "html",
-      "console"
-    ],
-    "absolute": true,
-    "gitignore": true,
-    "ignore": [
-      "**/.github/**",
-      "**/dist/**",
-      "**/report/**"
-    ]
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "collectCoverage": true,
-    "collectCoverageFrom": [
-      "**/src/**/*.{js,jsx,ts,tsx}",
-      "!dist/**/*.js"
-    ],
-    "moduleFileExtensions": [
-      "js",
-      "jsx",
-      "json",
-      "ts",
-      "tsx"
-    ],
-    "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest"
-    },
-    "globals": {
-      "ts-jest": {
-        "tsconfig": "tsconfig.json"
-      }
-    },
-    "testPathIgnorePatterns": [
-      "/dist/",
-      "/node_modules/"
-    ],
-    "moduleNameMapper": {
-      "^@gitexp/(.*)$": "<rootDir>/src/$1"
-    }
   },
   "devDependencies": {
-    "@commitlint/cli": "^16.2.3",
-    "@commitlint/config-conventional": "^16.2.1",
-    "@types/archiver": "^5.3.1",
+    "@commitlint/cli": "^17.5.0",
+    "@commitlint/config-conventional": "^17.4.4",
+    "@types/archiver": "^5.3.2",
     "@types/clear": "^0.1.2",
-    "@types/inquirer": "^8.2.1",
-    "@types/jest": "^27.4.1",
-    "@types/lodash": "^4.14.182",
-    "@types/node": "^17.0.25",
+    "@types/inquirer": "^9.0.3",
+    "@types/jest": "^29.5.0",
+    "@types/lodash": "^4.14.191",
+    "@types/node": "^18.15.10",
     "@types/pluralize": "0.0.29",
     "@types/spinnies": "^0.5.0",
-    "@typescript-eslint/eslint-plugin": "^5.20.0",
-    "@typescript-eslint/parser": "^5.20.0",
-    "commitizen": "^4.2.4",
-    "cz-conventional-changelog": "^3.3.0",
-    "eslint": "^8.13.0",
-    "eslint-config-standard-with-typescript": "^21.0.1",
-    "eslint-formatter-codeframe": "^7.32.1",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-jest": "^26.1.4",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^6.0.0",
-    "husky": "^7.0.4",
-    "jest": "^27.5.1",
-    "jscpd": "^3.4.5",
-    "lint-staged": "^12.4.0",
-    "npm-check-updates": "^12.5.9",
-    "prettier": "^2.6.2",
-    "standardx": "^7.0.0",
-    "ts-jest": "^27.1.4",
-    "ts-node": "^10.7.0",
-    "typescript": "^4.6.3",
-    "vrelease-bin": "^0.3.2"
+    "@typescript-eslint/eslint-plugin": "^5.56.0",
+    "@typescript-eslint/parser": "^5.56.0",
+    "commitizen": "^4.3.0",
+    "husky": "^8.0.3",
+    "jest": "^29.5.0",
+    "jscpd": "^3.5.4",
+    "lint-staged": "^13.2.0",
+    "npm-check-updates": "^16.8.0",
+    "prettier": "^2.8.7",
+    "ts-jest": "^29.0.5",
+    "ts-node": "^10.9.1",
+    "ts-standard": "^12.0.2",
+    "typescript": "^5.0.2"
   },
   "dependencies": {
-    "@octokit/rest": "^18.12.0",
+    "@octokit/rest": "^19.0.7",
     "archiver": "^5.3.1",
     "chalk": "^4.1.2",
     "clear": "^0.1.0",
-    "cli-spinners": "^2.6.1",
-    "commander": "^9.2.0",
-    "date-fns": "^2.28.0",
-    "fast-folder-size": "^1.6.1",
-    "inquirer": "^8.2.2",
+    "cli-spinners": "^2.7.0",
+    "commander": "^10.0.0",
+    "date-fns": "^2.29.3",
+    "fast-folder-size": "^1.7.1",
+    "inquirer": "^9.1.5",
     "lodash": "^4.17.21",
     "pluralize": "^8.0.0",
-    "simple-git": "^3.7.0",
+    "simple-git": "^3.17.0",
     "spinnies": "^0.5.1"
   }
 }
