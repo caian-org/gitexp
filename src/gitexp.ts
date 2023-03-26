@@ -9,143 +9,43 @@ import Git from 'simple-git'
 import archiver from 'archiver'
 import fastFolderSize from 'fast-folder-size'
 import { Octokit } from '@octokit/rest'
-import { Command, Option, OptionValues } from 'commander'
-import { differenceInSeconds, secondsToMinutes, secondsToHours, format as fmtDatetime } from 'date-fns'
+import { OptionValues } from 'commander'
 
 /* aesthetic stuff */
 import chalk from 'chalk'
 import clear from 'clear'
 import plural from 'pluralize'
-import Spinnies from 'spinnies'
-import cliSpinner, { Spinner as SpinnerType } from 'cli-spinners'
+import cliSpinner from 'cli-spinners'
 
-/* -------------------------------------------------------------------------
-                               TYPES & INTERFACES
-   ------------------------------------------------------------------------- */
+import figlets from './figlets'
+import spinnyBuilder from './spinner'
+import { parseCommandLineArgs } from './cli'
+import { censor, fmt, fmtBytes, getElapsedTimeFormatted, tabulateOccurrences } from './format'
+import { str, len, isDef, uniq, largestWord } from './primitive'
 
-/* ... */
-interface IHash {
-  [key: string]: any
-}
+import { IS_RUNNING_ON_CI_ENV } from './consts'
 
-/* ... */
-interface IRepository {
-  name: string
-  fullName: string
-  url: string
-  lang: string
-  isPrivate: boolean
-  owner: {
-    name: string
-    isOrg: boolean
-  }
-}
-
-/* ... */
-interface ISpinny {
-  ref: Spinny
-  succeed: (t: string) => void
-  fail: (t: string) => void
-}
-
-interface IOccurence {
-  name: string
-  count: number
-}
-
-/* ... */
-interface IGitHubStats {
-  repos: {
-    pub: string[]
-    priv: string[]
-  }
-  users: IOccurence[]
-  orgs: IOccurence[]
-  langs: IOccurence[]
-}
-
-interface IGitHubAuthData {
-  client: Octokit
-  authToken: string
-  authUserData: {
-    login: string
-    name: string
-  }
-}
-
-/* ... */
-interface IUserRepositories {
-  repositories: IRepository[]
-  stats: IGitHubStats
-}
-
-/* ... */
-interface IGitCloneSpinner {
-  repoClonedCounter: number
-  repoFailedCounter: number
-  counterPad: number
-  repoNamePad: number
-  repoTotal: string
-  spinner: ISpinny
-}
-
-/* ... */
-interface IWorkingTimer {
-  spinner: ISpinny
-  elapsed: number
-}
-
-/* ... */
-interface ICloneFilters {
-  visibility: RepoVisibility
-  ownerType: RepoOwnerType
-  onlyFrom: string[] | null
-  languages: string[] | null
-}
-
-/* ... */
-interface ITabulateOptions {
-  maxColsToDisplay?: number
-  hideRank?: boolean
-  hideOccurences?: boolean
-}
-
-/* ... */
-enum RepoVisibility {
-  ALL = 'all',
-  PUBLIC = 'public',
-  PRIVATE = 'private'
-}
-
-/* ... */
-enum RepoOwnerType {
-  ALL = 'all',
-  USER = 'user',
-  ORG = 'org'
-}
-
-/* ... */
-type CloneStatus = PromiseSettledResult<IRepository>
-type Spinny = Spinnies.SpinnerOptions
-type SpinnyOptions = Spinnies.Options
-type SpinnyBuilder = (n: string, t: string) => ISpinny
+import {
+  CloneStatus,
+  ICloneFilters,
+  IGitCloneSpinner,
+  IGitHubAuthData,
+  IGitHubStats,
+  IOccurence,
+  IRepository,
+  IUserRepositories,
+  IWorkingTimer,
+  RepoOwnerType,
+  RepoVisibility,
+  SpinnyBuilder
+} from './types'
 
 /* -------------------------------------------------------------------------
                               HELPERS & UTILITIES
    ------------------------------------------------------------------------- */
 
-/* ... */
-const fmt = util.format
 const ffs = util.promisify(fastFolderSize)
 const { log } = console
-
-const str = (n: Buffer | number): string => n.toString()
-const len = (a: any[] | string): number => a.length
-const uniq = (i: string[]): string[] => [...new Set(i)]
-
-const largestWord = (i: string[]): string => i.reduce((a, b) => (len(a) > len(b) ? a : b))
-
-const isDef = (k: string): boolean => typeof process.env[k] !== 'undefined'
 
 const errMsg = (e: any): string => (e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e))
 
@@ -154,188 +54,12 @@ const panic = (m: any): void => {
   process.exit(1)
 }
 
-const indent =
-  (level: number = 2) =>
-    (a: string): string =>
-      ' '.repeat(level).concat(a)
-
-/* ... */
 const DEST_DIR = path.join(__dirname, 'gitexp-out')
-const IS_TESTING = isDef('IS_TESTING')
-
-/* adapted from <https://github.com/watson/ci-info> */
-const IS_RUNNING_ON_CI_ENV = !!(
-  // Travis CI, CircleCI, Cirrus CI, Gitlab CI, Appveyor, CodeShip, dsari
-  (
-    isDef('CI') ||
-    // Travis CI, Cirrus CI
-    isDef('CONTINUOUS_INTEGRATION') ||
-    // Jenkins, TeamCity
-    isDef('BUILD_NUMBER') ||
-    // TaskCluster, dsari
-    isDef('RUN_ID') ||
-    false
-  )
-)
-
-/* ... */
-const fmtBytes = (bytes: number, decimals: number = 2): string => {
-  if (bytes < 0) {
-    throw new Error(`Bytes must be above 0; got "${bytes}"`)
-  }
-
-  if (bytes === 0) {
-    return '0 Bytes'
-  }
-
-  const k = 1024
-  const dm = Number(decimals < 0 ? 0 : decimals)
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return fmt('%s %s', str(parseFloat((bytes / Math.pow(k, i)).toFixed(dm))), sizes[i])
-}
-
-/* ... */
-const getElapsedTimeFormatted = (start: Date): string => {
-  const elapsedTime = differenceInSeconds(new Date(), start)
-
-  const q = (x: number, v: string): IHash => ({ value: x, ext: plural(v, x, true) })
-  const t = [
-    q(elapsedTime, 'second'),
-    q(secondsToMinutes(elapsedTime), 'minute'),
-    q(secondsToHours(elapsedTime), 'hour')
-  ]
-
-  const template = (() => {
-    switch (t.map((i) => Number(i.value > 0)).reduce((a, b) => a + b)) {
-      case 1:
-        return '%s'
-      case 2:
-        return '%s and %s'
-      default:
-        return '%s, %s and %s'
-    }
-  })()
-
-  return fmt(template, ...t.filter((i) => i.value > 0).map((i) => i.ext))
-}
-
-/* ... */
-const getFiglets = async (): Promise<string[]> => {
-  const fig: string[] = []
-
-  const t = (n: string): string => '(%%%' + n.toUpperCase()
-  const tag = Object.fromEntries(['start', 'end', 'div'].map((i) => [i, t(i)]))
-
-  try {
-    let foundStart = false
-    const itself = await fs.promises.readFile(__filename)
-    const lines = str(itself).split('\n')
-
-    for (const line of lines) {
-      const l = line.trim()
-      if (l === '') {
-        continue
-      }
-
-      if (l.startsWith(tag.start)) {
-        foundStart = true
-        continue
-      }
-
-      if (l.startsWith(tag.end)) {
-        break
-      }
-
-      if (foundStart) {
-        if (l.startsWith(tag.div)) {
-          fig.push(tag.div)
-          continue
-        }
-
-        fig.push(' '.repeat(2).concat(line))
-      }
-    }
-
-    return fig.join('\n').split(tag.div)
-  } catch (e) {
-    return []
-  }
-}
-
-/* ... */
-const displayBanner = async (): Promise<void> => {
-  clear()
-
-  const figlets = await getFiglets()
-  const banner = len(figlets) > 0 ? _.sample(figlets) : ''
-
-  log(chalk.gray(banner))
-}
-
-/* ... */
-const censor = (o: string, n: string): string => {
-  const c = '*'
-  const r = (t: string): string =>
-    len(t) < 4 ? c.repeat(len(t)) : t.slice(0, 3 - len(t)).concat(c.repeat((3 - len(t)) * -1))
-
-  return fmt('%s/%s', r(o), r(n))
-}
-
-/* got from <https://github.com/chalk/ansi-regex> */
-const stripColor = (t: string): string =>
-  t.replace(
-    new RegExp(
-      [
-        '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
-        '(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))'
-      ].join('|'),
-      'g'
-    ),
-    ''
-  )
 
 /* -------------------------------------------------------------------------
                                   CLI SPINNERS
    ------------------------------------------------------------------------- */
 
-/* ... */
-const spinnyBuilder = (spinner: SpinnerType, suppress: boolean = false): SpinnyBuilder => {
-  const c = { spinnerColor: 'blueBright', succeedColor: 'white', failColor: 'white' }
-
-  if (!suppress) {
-    const spinnies = new Spinnies(
-      _.merge(c, { spinner, succeedPrefix: '✔', color: 'white' }) as unknown as SpinnyOptions
-    )
-
-    return (name, text) => {
-      const ref = spinnies.add(name, { text })
-
-      return {
-        ref,
-        succeed: (t: string) => spinnies.succeed(name, { text: t }),
-        fail: (t: string) => spinnies.fail(name, { text: t })
-      }
-    }
-  }
-
-  return (__: string, t: string) => {
-    const ref = _.merge(c, { text: '', indent: 0, status: 'stopped' }) as unknown as Spinny
-
-    const fn = (m: string): void =>
-      log(
-        fmt('%s %s %s %s', chalk.gray('>>>'), chalk.blueBright(fmtDatetime(new Date(), 'yyyy-MM-dd HH:mm:ss'))),
-        chalk.gray('|'),
-        chalk.bold(m)
-      )
-
-    fn(t)
-    return { ref, succeed: fn, fail: fn }
-  }
-}
-
-/* ... */
 const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: boolean): void => {
   if (hasFailed) {
     g.repoFailedCounter += 1
@@ -351,7 +75,6 @@ const updateCloneSpinner = (g: IGitCloneSpinner, r: IRepository, hasFailed: bool
   g.spinner.ref.text = fmt('%s | %s', c, p.concat(f))
 }
 
-/* ... */
 const concludeCloneSpinner = async (g: IGitCloneSpinner, s: CloneStatus[], e: CloneStatus[]): Promise<void> => {
   const destDirSize = (await ffs(DEST_DIR)) ?? 0
   const labelDownloaded = fmt('%s downloaded locally', fmtBytes(destDirSize))
@@ -366,7 +89,6 @@ const concludeCloneSpinner = async (g: IGitCloneSpinner, s: CloneStatus[], e: Cl
   }
 }
 
-/* ... */
 const tickTimer = (wt: IWorkingTimer): void => {
   wt.elapsed += 50
   wt.spinner.ref.text = fmt('working... %s seconds elapsed', (wt.elapsed / 1000).toFixed(2))
@@ -376,7 +98,6 @@ const tickTimer = (wt: IWorkingTimer): void => {
                            GIT / GITHUB INTERACTIONS
    ------------------------------------------------------------------------- */
 
-/* ... */
 const cloneLocally = async (g: IGitCloneSpinner, token: string, user: string, r: IRepository): Promise<IRepository> => {
   const d = path.join(DEST_DIR, r.owner.name)
 
@@ -396,7 +117,6 @@ const cloneLocally = async (g: IGitCloneSpinner, token: string, user: string, r:
   }
 }
 
-/* ... */
 const zipCloned = async (): Promise<string> => {
   return await new Promise((resolve, reject) => {
     const dest = path.join(__dirname, 'gitexp-archive.zip')
@@ -416,7 +136,6 @@ const zipCloned = async (): Promise<string> => {
   })
 }
 
-/* ... */
 const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
   const sp = sb('archive', 'creating ZIP archive')
 
@@ -434,7 +153,6 @@ const createClonedZIPArchive = async (sb: SpinnyBuilder): Promise<void> => {
   }
 }
 
-/* ... */
 const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
   const rank = (i: string[]): IOccurence[] => {
     const r = Object.fromEntries(uniq(i).map((l) => [l, 0]))
@@ -479,7 +197,6 @@ const categorizeRepositories = (repos: IRepository[]): IGitHubStats => {
   return s
 }
 
-/* ... */
 const fetchAllRepositories = async (sb: SpinnyBuilder, client: Octokit): Promise<IUserRepositories> => {
   const sp = sb('fetchAllRepositories', 'fetching repositories')
 
@@ -525,7 +242,6 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, client: Octokit): Promise
   return { repositories: r, stats: s }
 }
 
-/* ... */
 const authenticate = async (sb: SpinnyBuilder): Promise<IGitHubAuthData> => {
   const sp = sb('authenticate', 'authenticating')
 
@@ -558,36 +274,6 @@ const authenticate = async (sb: SpinnyBuilder): Promise<IGitHubAuthData> => {
                              CLI & USER INTERACTION
    ------------------------------------------------------------------------- */
 
-/* ... */
-const parseCommandLineArgs = (args: string[]): OptionValues => {
-  const commaList = (value: string, _: any): string[] =>
-    value
-      .split(',')
-      .map((i) => i.trim())
-      .filter((i) => len(i) > 1)
-
-  const owner = new Option('-t, --owner-type <type>', 'filter by owner type')
-  const visibility = new Option('-b, --visibility <level>', 'filter by repository visibility')
-  const items = (o: object): string[] => Object.values(o).filter((v) => v !== 'all')
-
-  let cmd = new Command().version('1.0.0', '-v, --version')
-
-  /* interactive prompt must not be available on certain situations */
-  if (!IS_RUNNING_ON_CI_ENV) {
-    cmd = cmd.option('-i, --interactive', 'set the running options interactively')
-  }
-
-  return cmd
-    .option('-s, --summary', 'display a summary of repositories, languages, orgs etc')
-    .option('-l, --languages <langs>', 'filter by project language (comma separated)', commaList)
-    .option('-f, --only-from <name>', 'filter by owner name (comma separated)', commaList)
-    .addOption(owner.choices(items(RepoOwnerType)))
-    .addOption(visibility.choices(items(RepoVisibility)))
-    .parse(args)
-    .opts()
-}
-
-/* ... */
 const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
   visibility: opts.visibility ?? RepoVisibility.ALL,
   ownerType: opts.ownerType ?? RepoOwnerType.ALL,
@@ -595,81 +281,6 @@ const setArgsFallback = (opts: OptionValues): ICloneFilters => ({
   languages: opts.languages ?? null
 })
 
-/* ... */
-const tabulateOccurrences = (occ: IOccurence[], opts: ITabulateOptions = {}): string => {
-  const { maxColsToDisplay = 4, hideRank = false, hideOccurences = false } = opts
-
-  const occurPositionPadSpace = len(str(len(occ)))
-
-  const colsToDisplay = (() => {
-    /* the length of the largest possible result, e.g. "99. Some occurrence (100)" */
-    const t =
-      occurPositionPadSpace +
-      len(largestWord(occ.map((w) => str(w.count)))) +
-      len(largestWord(occ.map((w) => w.name))) +
-      (maxColsToDisplay - 1) * 6
-
-    /* given the length of the largest result, how many columns fits on the terminal? */
-    const m = Math.ceil(process.stdout.columns / t)
-
-    /* we need at least one column */
-    if (m <= 0) {
-      return 1
-    }
-
-    /* and at maximum ... */
-    return m > maxColsToDisplay ? maxColsToDisplay : m
-  })()
-
-  /* divide the lines in chunks of N (columns amount) */
-  const occurChunkedByCols = _.chunk(
-    /* give the ranked list some pretty colors */
-    occ.map((s, i) =>
-      fmt(
-        '%s %s %s',
-        hideRank ? '' : _.padStart(chalk.gray(`${i + 1}.`), occurPositionPadSpace + 1),
-        s.name,
-        hideOccurences ? '' : chalk.bold(fmt('(%d)', s.count))
-      )
-    ),
-    Math.ceil(len(occ) / colsToDisplay)
-  )
-
-  /* the length of the largest line of each column */
-  const columnPad = occurChunkedByCols.map((q) => len(largestWord(q.map((t) => stripColor(t)))))
-
-  const entries = Array
-    /* creates an empty array just to iterate N times (max number of lines on a given column) */
-    .from(Array(len(_.first(occurChunkedByCols) ?? [])))
-
-    /* join items N times (columns amount); transforms this:
-       [
-         ['a', 'b', 'c', 'd'],
-         ['e', 'f', 'g', 'h'],
-         ['i', 'j', 'k', 'l'],
-       ]
-
-     into this:
-       [
-         'a b c d',
-         'e f g h',
-         'i j k l',
-       ] */
-    .map((_, lineNumber) =>
-      occurChunkedByCols
-        .map((column, colNumber) =>
-          (column[lineNumber] ?? '').concat(
-            ' '.repeat(columnPad[colNumber] - len(stripColor(column[lineNumber] ?? '')))
-          )
-        )
-        .join('  ')
-    )
-    .map(indent())
-
-  return (entries.every((t) => t.startsWith(' ', 3)) ? entries.map((t) => t.trim()).map(indent()) : entries).join('\n')
-}
-
-/* ... */
 const showGithubSummary = (stats: IGitHubStats): void => {
   const h = (t: string): void => log(chalk.cyan(t))
 
@@ -689,11 +300,9 @@ const showGithubSummary = (stats: IGitHubStats): void => {
   }
 }
 
-/* ... */
 // @ts-expect-error
 const getRunningOptionsInteractively = (): ICloneFilters => {}
 
-/* ... */
 const filterReposByUserInput = (repositories: IRepository[], f: ICloneFilters): IRepository[] =>
   repositories
     /* repository visibility filter; should only gets public? or private? or both? */
@@ -722,19 +331,18 @@ const filterReposByUserInput = (repositories: IRepository[], f: ICloneFilters): 
                                    ENTRYPOINT
    ------------------------------------------------------------------------- */
 
-/* ... */
 const main = async (): Promise<void> => {
   const cliOptions = parseCommandLineArgs(process.argv)
-
-  await displayBanner()
-  const startTS = new Date()
-
-  /* ... */
   const showSummary = cliOptions.summary !== undefined
   const runInteractive = cliOptions.interactive !== undefined
 
-  const suppressLoadingSpinners = showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
+  clear()
+  const banner = len(figlets) > 0 ? _.sample(figlets) : ''
+  log(chalk.gray(banner))
 
+  const startTS = new Date()
+
+  const suppressLoadingSpinners = showSummary || IS_RUNNING_ON_CI_ENV || isDef('IS_RUNNING_ON_DOCKER')
   const sb = spinnyBuilder(cliSpinner.point, suppressLoadingSpinners)
 
   const wt: IWorkingTimer = { spinner: sb('main', 'working...'), elapsed: 0 }
@@ -782,135 +390,4 @@ const main = async (): Promise<void> => {
   wt.spinner.succeed(fmt('job finished in %s', getElapsedTimeFormatted(startTS)))
 }
 
-if (!IS_TESTING) {
-  main().catch((e) => panic(e))
-}
-
-export default IS_TESTING
-  ? {
-      // done
-      str,
-      len,
-      uniq,
-      censor,
-      fmtBytes,
-      // to be tested
-      isDef,
-      getElapsedTimeFormatted,
-      filterReposByUserInput,
-      parseCommandLineArgs,
-      categorizeRepositories
-    }
-  : null
-
-/*
-(%%%START | font: rev
-
-======================================
-=============  =======================
-==   ===  ==    ===   ===  =  ==    ==
-=  =  =======  ===  =  ==  =  ==  =  =
-==    ==  ===  ===     ===   ===  =  =
-====  ==  ===  ===  ======   ===    ==
-=  =  ==  ===  ===  =  ==  =  ==  ====
-==   ===  ===   ===   ===  =  ==  ====
-======================================
-
-(%%%DIV | font: speed
-
-        __________
-_______ ___(_)_  /_________  _________
-__  __ `/_  /_  __/  _ \_  |/_/__  __ \
-_  /_/ /_  / / /_ /  __/_>  < __  /_/ /
-_\__, / /_/  \__/ \___//_/|_| _  .___/
-/____/                        /_/
-
-(%%%DIV | font: poison
-
- @@@@@@@@  @@@  @@@@@@@  @@@@@@@@  @@@  @@@  @@@@@@@
-@@@@@@@@@  @@@  @@@@@@@  @@@@@@@@  @@@  @@@  @@@@@@@@
-!@@        @@!    @@!    @@!       @@!  !@@  @@!  @@@
-!@!        !@!    !@!    !@!       !@!  @!!  !@!  @!@
-!@! @!@!@  !!@    @!!    @!!!:!     !@@!@!   @!@@!@!
-!!! !!@!!  !!!    !!!    !!!!!:      @!!!    !!@!!!
-:!!   !!:  !!:    !!:    !!:        !: :!!   !!:
-:!:   !::  :!:    :!:    :!:       :!:  !:!  :!:
- ::: ::::   ::     ::     :: ::::   ::  :::   ::
- :: :: :   :       :     : :: ::    :   ::    :
-
-(%%%DIV | font: nancyj-fancy
-
-         oo   dP
-              88
-.d8888b. dP d8888P .d8888b. dP.  .dP 88d888b.
-88'  `88 88   88   88ooood8  `8bd8'  88'  `88
-88.  .88 88   88   88.  ...  .d88b.  88.  .88
-`8888P88 dP   dP   `88888P' dP'  `dP 88Y888P'
-     .88                             88
- d8888P                              dP
-
-(%%%DIV | font: lean
-
-              _/    _/
-     _/_/_/      _/_/_/_/    _/_/    _/    _/  _/_/_/
-  _/    _/  _/    _/      _/_/_/_/    _/_/    _/    _/
- _/    _/  _/    _/      _/        _/    _/  _/    _/
-  _/_/_/  _/      _/_/    _/_/_/  _/    _/  _/_/_/
-     _/                                    _/
-_/_/                                      _/
-
-(%%%DIV | font: larry3d
-
-          __
-       __/\ \__
-   __ /\_\ \ ,_\    __   __  _  _____
- /'_ `\/\ \ \ \/  /'__`\/\ \/'\/\ '__`\
-/\ \L\ \ \ \ \ \_/\  __/\/>  </\ \ \L\ \
-\ \____ \ \_\ \__\ \____\/\_/\_\\ \ ,__/
- \/___L\ \/_/\/__/\/____/\//\/_/ \ \ \/
-   /\____/                        \ \_\
-   \_/__/                          \/_/
-
-(%%%DIV | font: fender
-
-              ||
-        ''    ||
-.|''|,  ||  ''||''  .|''|, \\  // '||''|,
-||  ||  ||    ||    ||..||   ><    ||  ||
-`|..|| .||.   `|..' `|...  //  \\  ||..|'
-    ||                             ||
- `..|'                            .||
-
-(%%%DIV | font: graffiti
-
-        .__  __
-   ____ |__|/  |_  ____ ___  _________
-  / ___\|  \   __\/ __ \\  \/  /\____ \
- / /_/  >  ||  | \  ___/ >    < |  |_> >
- \___  /|__||__|  \___  >__/\_ \|   __/
-/_____/               \/      \/|__|
-
-(%%%DIV | font: merlin1
-
-  _______   __  ___________  _______  ___  ___    _______
- /" _   "| |" \("     _   ")/"     "||"  \/"  |  |   __ "\
-(: ( \___) ||  |)__/  \\__/(: ______) \   \  /   (. |__) :)
- \/ \      |:  |   \\_ /    \/    |    \\  \/    |:  ____/
- //  \ ___ |.  |   |.  |    // ___)_   /\.  \    (|  /
-(:   _(  _|/\  |\  \:  |   (:      "| /  \   \  /|__/ \
- \_______)(__\_|_)  \__|    \_______)|___/\___|(_______)
-
-(%%%DIV | font: bloody
-
-  ▄████  ██▓▄▄▄█████▓▓█████ ▒██   ██▒ ██▓███
- ██▒ ▀█▒▓██▒▓  ██▒ ▓▒▓█   ▀ ▒▒ █ █ ▒░▓██░  ██▒
-▒██░▄▄▄░▒██▒▒ ▓██░ ▒░▒███   ░░  █   ░▓██░ ██▓▒
-░▓█  ██▓░██░░ ▓██▓ ░ ▒▓█  ▄  ░ █ █ ▒ ▒██▄█▓▒ ▒
-░▒▓███▀▒░██░  ▒██▒ ░ ░▒████▒▒██▒ ▒██▒▒██▒ ░  ░
- ░▒   ▒ ░▓    ▒ ░░   ░░ ▒░ ░▒▒ ░ ░▓ ░▒▓▒░ ░  ░
-  ░   ░  ▒ ░    ░     ░ ░  ░░░   ░▒ ░░▒ ░
-░ ░   ░  ▒ ░  ░         ░    ░    ░  ░░
-      ░  ░              ░  ░ ░    ░
-
-(%%%END <https://patorjk.com/software/taag/>
- */
+main().catch((e) => panic(e))
