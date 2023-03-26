@@ -2,65 +2,48 @@ name: Perform code checkings
 
 on:
   push:
-    branches: '*'
-    tags: '*'
-    paths-ignore: '**.md'
+    branches: ['*']
+    tags: ['*']
+    paths-ignore: ['**.md']
 
   pull_request:
-    branches: '*'
-    tags: '*'
-    paths-ignore: '**.md'
+    branches: ['*']
+    tags: ['*']
+    paths-ignore: ['**.md']
 
 jobs:
   code-check:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout to gitexp
-        uses: actions/checkout@v3
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2.2.1
-        with:
-          version: 6.32.x
+      - uses: actions/checkout@v3
 
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: 16.x
-          cache: pnpm
+          node-version: 18.x
+          cache: npm
 
-      - name: Cache pnpm store
+      - name: Cache npm modules
         id: cache-node-modules
         uses: actions/cache@v3
         with:
           path: |
             ./node_modules
-            ~/.pnpm-store
-          key: ${{ env.preffix }}-cache-${{ env.cache-name }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ env.preffix }}-cache-${{ env.cache-name }}-
-            ${{ env.preffix }}-cache-
-            ${{ env.preffix }}-
-        env:
-          cache-name: code-check
-          preffix: ${{ runner.os }}
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: pnpm i
+        run: npm ci
 
       - name: Check TS build
-        run: pnpm run build:js
-
-      - name: Check linter rules
-        run: pnpm run check:lint
+        run: npm run build:types
 
       - name: Check code style
-        run: pnpm run check:style
+        run: npm run check:style
 
       - name: Check for duplicated code
-        run: pnpm run check:duplicated
+        run: npm run check:duplicated
 
       - name: Run tests
-        run: pnpm test
+        run: npm test

@@ -2,7 +2,7 @@ name: Build Docker image and push to Hub
 
 on:
   push:
-    tags: 'v*'
+    tags: ['v*']
 
 jobs:
   build-and-push:
@@ -27,7 +27,9 @@ jobs:
           export GIT_TAG="$(git tag | tail -n 1)"
           export IMAGE_LATEST="$IMAGE_NAME:latest"
           export IMAGE_TAGGED="$IMAGE_NAME:$GIT_TAG"
+
           docker build -t "$IMAGE_LATEST" .
-          docker push "$IMAGE_LATEST"
           docker tag "$IMAGE_LATEST" "$IMAGE_TAGGED"
+
+          docker push "$IMAGE_LATEST"
           docker push "$IMAGE_TAGGED"
