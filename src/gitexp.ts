@@ -222,7 +222,7 @@ const fetchAllRepositories = async (sb: SpinnyBuilder, client: Octokit): Promise
         isPrivate: repo.private,
         lang: (repo.language ?? 'n/a').toLowerCase(),
         owner: {
-          name: _.first(repo.full_name.split('/'))!,
+          name: _.first(repo.full_name.split('/')) ?? 'n/a',
           isOrg: repo.owner?.type.toLowerCase() === 'organization'
         }
       }))
