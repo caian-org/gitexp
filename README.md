@@ -1,5 +1,4 @@
 [![Code check][gh-cc-shield]][gh-cc-url]
-[![Code quality][lgtm-shield]][lgtm-url]
 [![Docker Image Size][docker-img-size-shield]][docker-url]
 [![GitHub tag][tag-shield]][tag-url]
 
@@ -9,16 +8,13 @@
 
 `gitexp` (<b>git</b>hub <b>exp</b>ort) is a tool to mass export/clone repos from GitHub.
 
-[gh-cc-shield]: https://img.shields.io/github/workflow/status/caian-org/gitexp/code-check?label=code%20check&logo=github&style=flat-square
+[gh-cc-shield]: https://img.shields.io/github/actions/workflow/status/caian-org/gitexp/code-check.yml?branch=master&label=code%20check&logo=github&style=for-the-badge
 [gh-cc-url]: https://github.com/caian-org/gitexp/actions/workflows/code-check.yml
 
-[lgtm-shield]: https://img.shields.io/lgtm/grade/javascript/g/caian-org/github-exporter.svg?logo=lgtm&style=flat-square
-[lgtm-url]: https://lgtm.com/projects/g/caian-org/github-exporter/context:javascript
-
-[docker-img-size-shield]: https://img.shields.io/docker/image-size/caian/gitexp?sort=semver&logo=docker&logoColor=FFF&style=flat-square
+[docker-img-size-shield]: https://img.shields.io/docker/image-size/caian/gitexp?sort=semver&logo=docker&logoColor=FFF&style=for-the-badge
 [docker-url]: https://hub.docker.com/r/caian/gitexp
 
-[tag-shield]: https://img.shields.io/github/tag/caian-org/gitexp.svg?logo=git&logoColor=FFF&style=flat-square
+[tag-shield]: https://img.shields.io/github/tag/caian-org/gitexp.svg?logo=git&logoColor=FFF&style=for-the-badge
 [tag-url]: https://github.com/caian-org/gitexp/releases
 
 
