@@ -132,7 +132,7 @@
     "vrelease-bin": "^0.3.2"
   },
   "dependencies": {
-    "@octokit/rest": "^18.12.0",
+    "@octokit/rest": "^19.0.7",
     "archiver": "^5.3.1",
     "chalk": "^4.1.2",
     "clear": "^0.1.0",
