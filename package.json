@@ -57,7 +57,7 @@
     "jest": "^29.5.0",
     "jscpd": "^3.5.4",
     "lint-staged": "^13.2.0",
-    "npm-check-updates": "^16.8.0",
+    "npm-check-updates": "^16.10.9",
     "prettier": "^2.8.7",
     "ts-jest": "^29.0.5",
     "ts-node": "^10.9.1",
